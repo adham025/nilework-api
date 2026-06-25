@@ -1,4 +1,6 @@
 import { corsOrigins, isProd } from "@/core/env";
+import { categoryRoutes } from "@/modules/categories/categories.routes";
+import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
 import { profileRoutes } from "@/modules/profiles/profiles.routes";
 import cors from "@fastify/cors";
@@ -43,6 +45,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Versioned API surface.
   await app.register(healthRoutes, { prefix: "/v1" });
   await app.register(profileRoutes, { prefix: "/v1" });
+  await app.register(categoryRoutes, { prefix: "/v1" });
+  await app.register(gigRoutes, { prefix: "/v1" });
 
   return app;
 }

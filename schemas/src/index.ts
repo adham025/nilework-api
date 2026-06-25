@@ -3,6 +3,8 @@
 // per MASTER_PLAN §6.6.
 
 export * from "./branded.js";
+export * from "./category.js";
 export * from "./common.js";
+export * from "./gig.js";
 export * from "./health.js";
 export * from "./profile.js";

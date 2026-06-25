@@ -21,6 +21,16 @@ export function getDb(): postgres.Sql {
       idle_timeout: 20,
       connect_timeout: 10,
       prepare: false, // compatible with Supabase's transaction pooler
+      types: {
+        // Return date/timestamp columns as raw strings (not JS Date), so they
+        // serialize directly against the z.string() schemas (MASTER_PLAN §6.4).
+        date: {
+          to: 1184,
+          from: [1082, 1083, 1114, 1184],
+          serialize: (x: string) => x,
+          parse: (x: string) => x,
+        },
+      },
     });
   }
   return sql;
