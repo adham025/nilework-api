@@ -1,0 +1,12 @@
+#!/bin/sh
+#
+# Fast local gate — runs BEFORE a commit is created (MASTER_PLAN §6.4).
+# Type + lint only, to keep commits fast. The full suite runs in pre-push.
+# Runs entirely on your machine — zero GitHub Actions minutes consumed.
+
+set -e
+
+echo "▶ pre-commit: typecheck + lint"
+npm run typecheck
+npm run lint
+echo "✓ pre-commit checks passed"

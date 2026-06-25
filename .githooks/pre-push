@@ -1,0 +1,11 @@
+#!/bin/sh
+#
+# Full local CI gate — runs BEFORE anything is pushed (MASTER_PLAN §6.4).
+# schemas build -> typecheck -> lint -> test -> build. Any failure aborts the
+# push, so broken code never reaches the remote. Zero GitHub Actions minutes.
+
+set -e
+
+echo "▶ pre-push: running full local CI (npm run ci)"
+npm run ci
+echo "✓ pre-push: all checks passed — pushing"
