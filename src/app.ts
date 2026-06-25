@@ -1,5 +1,6 @@
 import { corsOrigins, isProd } from "@/core/env";
 import { healthRoutes } from "@/modules/health/health.routes";
+import { profileRoutes } from "@/modules/profiles/profiles.routes";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import swagger from "@fastify/swagger";
@@ -41,6 +42,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Versioned API surface.
   await app.register(healthRoutes, { prefix: "/v1" });
+  await app.register(profileRoutes, { prefix: "/v1" });
 
   return app;
 }

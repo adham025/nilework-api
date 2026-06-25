@@ -1,0 +1,54 @@
+import { z } from "zod";
+import { LocaleSchema } from "./common.js";
+
+export const IdVerificationStatusSchema = z.enum(["unverified", "pending", "verified", "rejected"]);
+export type IdVerificationStatus = z.infer<typeof IdVerificationStatusSchema>;
+
+/** Full profile as returned by the API (snake_case mirrors the DB columns). */
+export const ProfileSchema = z.object({
+  id: z.string().uuid(),
+  display_name: z.string().nullable(),
+  locale: LocaleSchema,
+  is_client: z.boolean(),
+  is_freelancer: z.boolean(),
+  headline: z.string().nullable(),
+  bio: z.string().nullable(),
+  country: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  phone: z.string().nullable(),
+  phone_verified: z.boolean(),
+  id_verification_status: IdVerificationStatusSchema,
+  onboarding_completed: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type Profile = z.infer<typeof ProfileSchema>;
+
+/** Fields a user may patch on their own profile (onboarding + edits). */
+export const ProfileUpdateSchema = z
+  .object({
+    display_name: z.string().min(1).max(80),
+    locale: LocaleSchema,
+    is_client: z.boolean(),
+    is_freelancer: z.boolean(),
+    headline: z.string().max(120),
+    bio: z.string().max(2000),
+    country: z.string().max(2),
+    avatar_url: z.string().url(),
+  })
+  .partial();
+export type ProfileUpdate = z.infer<typeof ProfileUpdateSchema>;
+
+/** Onboarding completion requires a display name and at least one chosen role. */
+export const OnboardingSchema = z
+  .object({
+    display_name: z.string().min(1).max(80),
+    locale: LocaleSchema,
+    is_client: z.boolean(),
+    is_freelancer: z.boolean(),
+  })
+  .refine((v) => v.is_client || v.is_freelancer, {
+    message: "Choose at least one role (client and/or freelancer).",
+    path: ["is_client"],
+  });
+export type OnboardingInput = z.infer<typeof OnboardingSchema>;
