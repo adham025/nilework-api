@@ -57,10 +57,15 @@ export type GigCreateInput = z.infer<typeof GigCreateSchema>;
 
 export const GigStatusUpdateSchema = z.object({ status: GigStatusSchema });
 
-/** Browse query params for the public gig listing. */
+/** Browse query params for the public gig listing — incl. advanced filters (§5 Phase 3). */
 export const GigListQuerySchema = z.object({
   category: z.string().optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(48).default(24),
+  price_min: z.coerce.number().int().nonnegative().optional(),
+  price_max: z.coerce.number().int().nonnegative().optional(),
+  max_delivery_days: z.coerce.number().int().positive().optional(),
+  // String enum (not coerced boolean — "false" must mean false) → checked in the service.
+  verified_only: z.enum(["true", "false"]).optional(),
 });
 export type GigListQuery = z.infer<typeof GigListQuerySchema>;

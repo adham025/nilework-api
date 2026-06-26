@@ -66,6 +66,10 @@ export async function listGigs(query: GigListQuery): Promise<GigListResponse> {
     join public.profiles p on p.id = g.freelancer_id
     where g.status = 'active'
       ${query.category ? sql`and c.slug = ${query.category}` : sql``}
+      ${query.price_min !== undefined ? sql`and g.price_usd_minor >= ${query.price_min}` : sql``}
+      ${query.price_max !== undefined ? sql`and g.price_usd_minor <= ${query.price_max}` : sql``}
+      ${query.max_delivery_days !== undefined ? sql`and g.delivery_days <= ${query.max_delivery_days}` : sql``}
+      ${query.verified_only === "true" ? sql`and p.id_verification_status = 'verified'` : sql``}
       ${query.cursor ? sql`and g.created_at < ${query.cursor}` : sql``}
     -- Featured gigs float to the top of the first page (§5.3 redemption reward);
     -- deeper pages page purely by created_at to keep the cursor consistent.
