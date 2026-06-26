@@ -71,9 +71,11 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
         response: { 200: PhoneStartResultSchema, 401: ApiErrorSchema, 429: ApiErrorSchema },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) =>
-      run(reply, () => startPhoneVerification(req.authUser!.id, req.body.phone)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      return run(reply, () => startPhoneVerification(userId, req.body.phone));
+    },
   );
 
   r.post(
@@ -172,9 +174,11 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireStaff guarantees staffUser.
-    async (req, reply) =>
-      run(reply, () => reviewIdentity(req.params.id, req.staffUser!.id, true, null)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireStaff guarantees staffUser.
+      const staffId = req.staffUser!.id;
+      return run(reply, () => reviewIdentity(req.params.id, staffId, true, null));
+    },
   );
 
   r.post(
