@@ -12,7 +12,6 @@ import { z } from "zod";
 import {
   OrderError,
   cancelOrder,
-  confirmPayment,
   createOrder,
   getOrder,
   listMyOrders,
@@ -94,27 +93,6 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
     },
     // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
     async (req, reply) => run(reply, () => getOrder(req.params.id, req.authUser!.id)),
-  );
-
-  r.post(
-    "/orders/:id/confirm-payment",
-    {
-      preHandler: requireAuth,
-      schema: {
-        tags: ["orders"],
-        summary: "Confirm payment and fund escrow (client)",
-        params: IdParam,
-        response: {
-          200: OrderDetailSchema,
-          401: ApiErrorSchema,
-          403: ApiErrorSchema,
-          404: ApiErrorSchema,
-          409: ApiErrorSchema,
-        },
-      },
-    },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) => run(reply, () => confirmPayment(req.params.id, req.authUser!.id)),
   );
 
   r.post(

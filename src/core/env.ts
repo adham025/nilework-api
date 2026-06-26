@@ -26,6 +26,17 @@ const EnvSchema = z.object({
   // Email (Resend) — used by the notification worker (MASTER_PLAN §6.11).
   RESEND_API_KEY: z.string().optional(),
 
+  // Paymob (Egypt payments, MASTER_PLAN §6). All optional: when unset, order
+  // checkout runs in dev "simulation" mode and funds escrow directly, so the loop
+  // is testable locally without gateway keys. Production sets all four.
+  PAYMOB_API_KEY: z.string().optional(),
+  PAYMOB_INTEGRATION_ID: z.coerce.number().int().positive().optional(),
+  PAYMOB_IFRAME_ID: z.string().optional(),
+  PAYMOB_HMAC_SECRET: z.string().optional(),
+
+  // Public base URL of the web app, for building post-payment redirect targets.
+  WEB_BASE_URL: z.string().url().default("http://localhost:3000"),
+
   // CORS: comma-separated allowed origins for the web app.
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
 });
@@ -40,3 +51,8 @@ if (!parsed.success) {
 export const env = parsed.data;
 export const isProd = env.NODE_ENV === "production";
 export const corsOrigins = env.CORS_ORIGINS.split(",").map((o) => o.trim());
+
+/** True only when every Paymob credential is present — gates the real gateway path. */
+export const isPaymobConfigured = Boolean(
+  env.PAYMOB_API_KEY && env.PAYMOB_INTEGRATION_ID && env.PAYMOB_IFRAME_ID && env.PAYMOB_HMAC_SECRET,
+);

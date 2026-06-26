@@ -92,15 +92,19 @@ export async function createOrder(clientId: string, gigId: string): Promise<Orde
 }
 
 /**
- * Confirm payment → fund escrow. Credits the freelancer's pending balance with the
- * net amount in the same transaction as the status change (§6). In a later slice the
- * trigger moves from this client-called endpoint to the verified Paymob webhook.
+ * Fund escrow: credit the freelancer's pending balance with the net amount in the
+ * same transaction as the pending_payment → funded status change (§6). Authorization
+ * happens at the caller: the verified Paymob webhook (actor role 'system') or the
+ * dev-simulation checkout (the order's client). Throws conflict if already funded,
+ * which keeps webhook retries idempotent.
  */
-export async function confirmPayment(orderId: string, actorId: string): Promise<OrderDetail> {
+export async function fundEscrow(
+  orderId: string,
+  actor: { id: string | null; role: "client" | "system" },
+): Promise<OrderDetail> {
   const sql = getDb();
   await sql.begin(async (tx) => {
     const order = await lockOrder(tx, orderId);
-    if (order.client_id !== actorId) throw new OrderError("forbidden", "Not your order");
     requireStatus(order, "pending_payment");
 
     const wallet = await ensureWallet(order.freelancer_id);
@@ -123,8 +127,8 @@ export async function confirmPayment(orderId: string, actorId: string): Promise<
       orderId,
       "pending_payment",
       "funded",
-      actorId,
-      "client",
+      actor.id,
+      actor.role,
       "Payment confirmed",
     );
   });
