@@ -11,6 +11,7 @@ import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
 import { identityRoutes } from "@/modules/identity/identity.routes";
 import { levelRoutes } from "@/modules/levels/levels.routes";
+import { milestoneRoutes } from "@/modules/milestones/milestones.routes";
 import { notificationRoutes } from "@/modules/notifications/notifications.routes";
 import { offerRoutes } from "@/modules/offers/offers.routes";
 import { orderRoutes } from "@/modules/orders/orders.routes";
@@ -65,6 +66,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(categoryRoutes, { prefix: "/v1" });
   await app.register(gigRoutes, { prefix: "/v1" });
   await app.register(orderRoutes, { prefix: "/v1" });
+  await app.register(milestoneRoutes, { prefix: "/v1" });
   await app.register(offerRoutes, { prefix: "/v1" });
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(payoutRoutes, { prefix: "/v1" });

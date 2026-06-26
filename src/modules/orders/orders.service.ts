@@ -212,6 +212,13 @@ export async function markDelivered(orderId: string, actorId: string): Promise<O
     if (order.freelancer_id !== actorId) throw new OrderError("forbidden", "Not your order");
     requireStatus(order, "funded");
 
+    const ms = await tx<{ one: number }[]>`
+      select 1 as one from public.milestones where order_id = ${orderId} limit 1
+    `;
+    if (ms.length > 0) {
+      throw new OrderError("conflict", "This order uses milestones — deliver them individually");
+    }
+
     await tx`
       update public.orders
       set status = 'delivered',
