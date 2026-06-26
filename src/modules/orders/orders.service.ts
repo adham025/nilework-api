@@ -1,6 +1,7 @@
 import { getDb } from "@/core/db";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { getLatestRate } from "@/modules/fx/fx.service";
+import { awardAchievement, qualifyReferral } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
@@ -122,6 +123,7 @@ export async function createOrder(clientId: string, gigId: string): Promise<Orde
     }),
   );
 
+  await awardAchievement(clientId, "first_order");
   return loadDetail(order.id);
 }
 
@@ -191,6 +193,7 @@ export async function markDelivered(orderId: string, actorId: string): Promise<O
   });
   const detail = await loadDetail(orderId);
   await notify(detail.client_id, "order_delivered", { order_id: orderId });
+  await awardAchievement(detail.freelancer_id, "first_delivery");
   return detail;
 }
 
@@ -252,6 +255,9 @@ export async function releaseEscrow(
   });
   const detail = await loadDetail(orderId);
   await notify(detail.freelancer_id, "order_released", { order_id: orderId });
+  // A completed order qualifies a pending referral on either side (§5.3).
+  await qualifyReferral(detail.client_id);
+  await qualifyReferral(detail.freelancer_id);
   return detail;
 }
 

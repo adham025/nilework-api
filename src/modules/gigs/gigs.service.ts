@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/core/db";
+import { awardAchievement } from "@/modules/gamification/gamification.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import type {
   Gig,
@@ -42,7 +43,9 @@ export async function createGig(freelancerId: string, input: GigCreateInput): Pr
     returning ${sql.unsafe(GIG_COLUMNS)}
   `;
   // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
-  return rows[0]!;
+  const gig = rows[0]!;
+  await awardAchievement(freelancerId, "first_gig");
+  return gig;
 }
 
 /** Public browse — active gigs only, with embedded category + safe freelancer info. */

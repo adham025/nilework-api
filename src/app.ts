@@ -3,6 +3,7 @@ import { categoryRoutes } from "@/modules/categories/categories.routes";
 import { configRoutes } from "@/modules/config/config.routes";
 import { conversationRoutes } from "@/modules/conversations/conversations.routes";
 import { fxRoutes } from "@/modules/fx/fx.routes";
+import { gamificationRoutes } from "@/modules/gamification/gamification.routes";
 import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
 import { notificationRoutes } from "@/modules/notifications/notifications.routes";
@@ -64,6 +65,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(conversationRoutes, { prefix: "/v1" });
   await app.register(reviewRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });
+  await app.register(gamificationRoutes, { prefix: "/v1" });
   await app.register(walletRoutes, { prefix: "/v1" });
   await app.register(fxRoutes, { prefix: "/v1" });
   await app.register(configRoutes, { prefix: "/v1" });

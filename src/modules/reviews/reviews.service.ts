@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { awardAchievement } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import type {
   ProfileReviewsResponse,
@@ -67,6 +68,8 @@ export async function createReview(
   // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
   const review = rows[0]!;
   await notify(revieweeId, "review_received", { order_id: orderId, rating: input.rating });
+  await awardAchievement(reviewerId, "first_review");
+  if (input.rating === 5) await awardAchievement(revieweeId, "five_star");
   return review;
 }
 

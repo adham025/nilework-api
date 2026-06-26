@@ -1,4 +1,5 @@
 import { requireAuth } from "@/core/auth";
+import { awardAchievement } from "@/modules/gamification/gamification.service";
 import { ApiErrorSchema, ProfileSchema, ProfileUpdateSchema } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -37,7 +38,10 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-      return updateProfile(req.authUser!.id, req.body);
+      const profile = await updateProfile(req.authUser!.id, req.body);
+      // Gamification Phase-1 hook (§5.3): badge once onboarding completes.
+      if (profile.onboarding_completed) await awardAchievement(profile.id, "profile_complete");
+      return profile;
     },
   );
 }
