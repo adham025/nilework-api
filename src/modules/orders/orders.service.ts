@@ -1,6 +1,7 @@
 import { getDb } from "@/core/db";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { getLatestRate } from "@/modules/fx/fx.service";
+import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
 import type {
@@ -165,7 +166,9 @@ export async function fundEscrow(
       "Payment confirmed",
     );
   });
-  return loadDetail(orderId);
+  const detail = await loadDetail(orderId);
+  await notify(detail.freelancer_id, "order_funded", { order_id: orderId });
+  return detail;
 }
 
 /** Freelancer marks the order delivered, starting the client review / auto-release window. */
@@ -186,7 +189,9 @@ export async function markDelivered(orderId: string, actorId: string): Promise<O
     `;
     await recordEvent(tx, orderId, "funded", "delivered", actorId, "freelancer", "Work delivered");
   });
-  return loadDetail(orderId);
+  const detail = await loadDetail(orderId);
+  await notify(detail.client_id, "order_delivered", { order_id: orderId });
+  return detail;
 }
 
 /**
@@ -245,7 +250,9 @@ export async function releaseEscrow(
       actorRole === "system" ? "Auto-released after review window" : "Client released payment",
     );
   });
-  return loadDetail(orderId);
+  const detail = await loadDetail(orderId);
+  await notify(detail.freelancer_id, "order_released", { order_id: orderId });
+  return detail;
 }
 
 /** Client cancels an order that was never funded. No money has moved, so no ledger entry. */

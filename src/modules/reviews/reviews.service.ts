@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { notify } from "@/modules/notifications/notifications.service";
 import type {
   ProfileReviewsResponse,
   Review,
@@ -64,7 +65,9 @@ export async function createReview(
     returning ${sql.unsafe(REVIEW_COLUMNS)}
   `;
   // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
-  return rows[0]!;
+  const review = rows[0]!;
+  await notify(revieweeId, "review_received", { order_id: orderId, rating: input.rating });
+  return review;
 }
 
 /** Reviews left on a specific order (party-scoped — used in the order detail view). */

@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { notify } from "@/modules/notifications/notifications.service";
 import { getOrder, insertOrder } from "@/modules/orders/orders.service";
 import type { Offer, OfferCreateInput, OrderDetail } from "@nilework/schemas";
 import type { TransactionSql } from "postgres";
@@ -50,7 +51,12 @@ export async function createOffer(
     returning ${sql.unsafe(OFFER_COLUMNS)}
   `;
   // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
-  return rows[0]!;
+  const offer = rows[0]!;
+  await notify(offer.client_id, "offer_received", {
+    conversation_id: conversationId,
+    offer_id: offer.id,
+  });
+  return offer;
 }
 
 /** List a conversation's offers (participant only), newest first. */
@@ -72,7 +78,7 @@ export async function listOffers(conversationId: string, userId: string): Promis
  */
 export async function acceptOffer(offerId: string, clientId: string): Promise<OrderDetail> {
   const sql = getDb();
-  const orderId = await sql.begin(async (tx) => {
+  const created = await sql.begin(async (tx) => {
     const offer = await lockOffer(tx, offerId);
     if (offer.client_id !== clientId) throw new OfferError("forbidden", "Not your offer");
     if (offer.status !== "pending") {
@@ -92,10 +98,11 @@ export async function acceptOffer(offerId: string, clientId: string): Promise<Or
       deliveryDays: offer.delivery_days,
     });
     await tx`update public.offers set status = 'accepted', order_id = ${order.id} where id = ${offerId}`;
-    return order.id;
+    return { orderId: order.id, freelancerId: order.freelancer_id };
   });
 
-  return getOrder(orderId, clientId);
+  await notify(created.freelancerId, "offer_accepted", { order_id: created.orderId });
+  return getOrder(created.orderId, clientId);
 }
 
 /** Client declines a pending offer. */

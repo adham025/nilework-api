@@ -1,6 +1,7 @@
 import { getDb } from "@/core/db";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { estimateMinor, getLatestRate } from "@/modules/fx/fx.service";
+import { notify } from "@/modules/notifications/notifications.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
 import type {
   PaginationQuery,
@@ -176,7 +177,12 @@ export async function markPayoutPaid(payoutId: string, providerRef: string): Pro
       returning ${tx.unsafe(PAYOUT_COLUMNS)}
     `;
     // biome-ignore lint/style/noNonNullAssertion: update...returning yields the row.
-    return rows[0]!;
+    const paid = rows[0]!;
+    await notify(paid.profile_id, "payout_paid", {
+      payout_id: paid.id,
+      amount_usd_minor: paid.amount_usd_minor,
+    });
+    return paid;
   });
 }
 
