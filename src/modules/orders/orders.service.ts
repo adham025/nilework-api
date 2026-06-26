@@ -2,6 +2,7 @@ import { getDb } from "@/core/db";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { getLatestRate } from "@/modules/fx/fx.service";
 import { awardAchievement, qualifyReferral } from "@/modules/gamification/gamification.service";
+import { freelancerTier, tierCommissionBps, tierHoldDays } from "@/modules/levels/levels.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import { checkPromo, recordRedemption } from "@/modules/promo/promo.service";
@@ -119,18 +120,21 @@ export async function createOrder(
     throw new OrderError("conflict", "You cannot order your own gig");
   }
 
+  // Commission starts from the freelancer's Pro Path tier (§5.3 perk); a fee-waiver
+  // promo (§4.4) then reduces it further. Both resolved before the tx.
+  const baseBps = (await getPublicConfig()).commission_bps;
+  const tierBps = tierCommissionBps(await freelancerTier(gig.freelancer_id), baseBps);
+
   const order = await sql.begin(async (tx) => {
-    // Apply a fee-waiver promo (§4.4 launch subsidy) atomically with the order.
-    let commissionBpsOverride: number | undefined;
+    let commissionBpsOverride: number | undefined = tierBps !== baseBps ? tierBps : undefined;
     let promoId: string | undefined;
     if (promoCode) {
-      const baseBps = (await getPublicConfig()).commission_bps;
       const res = await checkPromo(tx, promoCode, clientId);
       if (!res.ok) throw new OrderError("conflict", `Promo code not valid: ${res.reason}`);
       if (res.promo.type !== "fee_waiver") {
         throw new OrderError("conflict", "This code can't be applied to an order");
       }
-      commissionBpsOverride = Math.max(0, baseBps - res.promo.value);
+      commissionBpsOverride = Math.max(0, tierBps - res.promo.value);
       promoId = res.promo.id;
     }
 
@@ -200,7 +204,9 @@ export async function fundEscrow(
 /** Freelancer marks the order delivered, starting the client review / auto-release window. */
 export async function markDelivered(orderId: string, actorId: string): Promise<OrderDetail> {
   const sql = getDb();
-  const { payout_hold_days } = await getPublicConfig();
+  const baseDays = (await getPublicConfig()).payout_hold_days;
+  // Pro Path perk (§5.3): higher tiers get a shorter review/auto-release window.
+  const holdDays = tierHoldDays(await freelancerTier(actorId), baseDays);
   await sql.begin(async (tx) => {
     const order = await lockOrder(tx, orderId);
     if (order.freelancer_id !== actorId) throw new OrderError("forbidden", "Not your order");
@@ -210,7 +216,7 @@ export async function markDelivered(orderId: string, actorId: string): Promise<O
       update public.orders
       set status = 'delivered',
           delivered_at = now(),
-          auto_release_at = now() + (${payout_hold_days} || ' days')::interval
+          auto_release_at = now() + (${holdDays} || ' days')::interval
       where id = ${orderId}
     `;
     await recordEvent(tx, orderId, "funded", "delivered", actorId, "freelancer", "Work delivered");

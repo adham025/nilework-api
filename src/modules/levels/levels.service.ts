@@ -47,6 +47,27 @@ export function tierFor(
   return { level, next, ordersToNext };
 }
 
+/**
+ * Tier perks (§5.3) — levels unlock real economics, not just a badge. Commission
+ * floors and payout-hold caps; Math.min so a lower app-config base is never raised.
+ */
+export function tierCommissionBps(level: FreelancerTier, baseBps: number): number {
+  if (level === "elite") return Math.min(baseBps, 600); // 6%
+  if (level === "pro") return Math.min(baseBps, 800); // 8%
+  return baseBps; // new / rising → base (10%)
+}
+
+export function tierHoldDays(level: FreelancerTier, baseDays: number): number {
+  if (level === "elite") return Math.min(baseDays, 1);
+  if (level === "pro") return Math.min(baseDays, 2);
+  return baseDays;
+}
+
+/** A freelancer's current tier (the input to the perk mappers above). */
+export async function freelancerTier(profileId: string): Promise<FreelancerTier> {
+  return (await computeFreelancerLevel(profileId)).level;
+}
+
 /** Compute a freelancer's Pro Path level from their orders + reviews. */
 export async function computeFreelancerLevel(profileId: string): Promise<FreelancerLevel> {
   const sql = getDb();

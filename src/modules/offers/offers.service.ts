@@ -1,4 +1,6 @@
 import { getDb } from "@/core/db";
+import { getPublicConfig } from "@/modules/config/config.service";
+import { freelancerTier, tierCommissionBps } from "@/modules/levels/levels.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import { getOrder, insertOrder } from "@/modules/orders/orders.service";
 import type { Offer, OfferCreateInput, OrderDetail } from "@nilework/schemas";
@@ -89,6 +91,9 @@ export async function acceptOffer(offerId: string, clientId: string): Promise<Or
       throw new OfferError("conflict", "Offer has expired");
     }
 
+    // Apply the freelancer's Pro Path commission tier (§5.3) to the order.
+    const baseBps = (await getPublicConfig()).commission_bps;
+    const tierBps = tierCommissionBps(await freelancerTier(offer.freelancer_id), baseBps);
     const order = await insertOrder(tx, {
       clientId: offer.client_id,
       freelancerId: offer.freelancer_id,
@@ -96,6 +101,7 @@ export async function acceptOffer(offerId: string, clientId: string): Promise<Or
       title: offer.title,
       grossUsdMinor: offer.price_usd_minor,
       deliveryDays: offer.delivery_days,
+      ...(tierBps !== baseBps ? { commissionBpsOverride: tierBps } : {}),
     });
     await tx`update public.offers set status = 'accepted', order_id = ${order.id} where id = ${offerId}`;
     return { orderId: order.id, freelancerId: order.freelancer_id };
