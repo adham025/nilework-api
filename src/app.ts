@@ -10,6 +10,7 @@ import { orderRoutes } from "@/modules/orders/orders.routes";
 import { paymentRoutes } from "@/modules/payments/payments.routes";
 import { payoutRoutes } from "@/modules/payouts/payouts.routes";
 import { profileRoutes } from "@/modules/profiles/profiles.routes";
+import { reviewRoutes } from "@/modules/reviews/reviews.routes";
 import { walletRoutes } from "@/modules/wallet/wallet.routes";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -60,6 +61,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(payoutRoutes, { prefix: "/v1" });
   await app.register(conversationRoutes, { prefix: "/v1" });
+  await app.register(reviewRoutes, { prefix: "/v1" });
   await app.register(walletRoutes, { prefix: "/v1" });
   await app.register(fxRoutes, { prefix: "/v1" });
   await app.register(configRoutes, { prefix: "/v1" });
