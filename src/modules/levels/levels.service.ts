@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { weightedAverage } from "@/modules/reviews/reviews.service";
 import type { ClientLevel, ClientTier, FreelancerLevel, FreelancerTier } from "@nilework/schemas";
 
 /**
@@ -75,14 +76,17 @@ export async function computeFreelancerLevel(profileId: string): Promise<Freelan
     select count(*)::int as c from public.orders
     where freelancer_id = ${profileId} and status = 'released'
   `;
-  const reviewRows = await sql<{ avg: number | null; c: number }[]>`
-    select avg(rating)::float8 as avg, count(*)::int as c from public.reviews
-    where reviewee_id = ${profileId}
+  const countRows = await sql<{ c: number }[]>`
+    select count(*)::int as c from public.reviews where reviewee_id = ${profileId}
+  `;
+  // Recency-weighted rating (§7) from recent reviews — the tier-deciding signal.
+  const ratingRows = await sql<{ rating: number; created_at: string }[]>`
+    select rating, created_at from public.reviews
+    where reviewee_id = ${profileId} order by created_at desc limit 100
   `;
   const completed = orderRows[0]?.c ?? 0;
-  const avgRaw = reviewRows[0]?.avg ?? null;
-  const avg = avgRaw === null ? null : Math.round(avgRaw * 100) / 100;
-  const reviews = reviewRows[0]?.c ?? 0;
+  const avg = weightedAverage(ratingRows);
+  const reviews = countRows[0]?.c ?? 0;
 
   const { level, next, ordersToNext } = tierFor(completed, avg, reviews);
   return {

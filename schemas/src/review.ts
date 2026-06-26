@@ -29,6 +29,8 @@ export const ReviewListSchema = z.array(ReviewWithReviewerSchema);
 /** Aggregate rating for a profile — the public reputation headline (§3). */
 export const ReviewSummarySchema = z.object({
   average: z.number().nullable(),
+  // Recency-weighted rating — recent reviews count more (§7). The trust signal.
+  weighted_average: z.number().nullable(),
   count: z.number().int().nonnegative(),
 });
 export type ReviewSummary = z.infer<typeof ReviewSummarySchema>;

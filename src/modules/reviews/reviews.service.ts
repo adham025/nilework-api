@@ -22,6 +22,30 @@ export class ReviewError extends Error {
 const REVIEW_COLUMNS = `
   id, order_id, reviewer_id, reviewee_id, reviewer_role, rating, comment, created_at
 `;
+
+const RATING_HALF_LIFE_DAYS = 180;
+
+/**
+ * Recency-weighted average rating (§7): each review decays by an exponential
+ * half-life, so recent work dominates the score. Pure + unit-tested; the trust
+ * signal used on profiles/gigs and for the Pro Path tier (§5.3).
+ */
+export function weightedAverage(
+  reviews: { rating: number; created_at: string }[],
+  halfLifeDays = RATING_HALF_LIFE_DAYS,
+  now: number = Date.now(),
+): number | null {
+  if (reviews.length === 0) return null;
+  let num = 0;
+  let den = 0;
+  for (const r of reviews) {
+    const ageDays = (now - new Date(r.created_at).getTime()) / 86_400_000;
+    const w = 0.5 ** (Math.max(0, ageDays) / halfLifeDays);
+    num += r.rating * w;
+    den += w;
+  }
+  return den === 0 ? null : Math.round((num / den) * 100) / 100;
+}
 const REVIEWER_JSON =
   "json_build_object('id', p.id, 'display_name', p.display_name, 'avatar_url', p.avatar_url)";
 
@@ -117,6 +141,7 @@ export async function getProfileReviews(profileId: string): Promise<ProfileRevie
   return {
     summary: {
       average: summary.average === null ? null : Math.round(summary.average * 100) / 100,
+      weighted_average: weightedAverage(items),
       count: summary.count,
     },
     items,
