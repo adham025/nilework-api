@@ -26,4 +26,5 @@ export * from "./profile.js";
 export * from "./promo.js";
 export * from "./redemption.js";
 export * from "./review.js";
+export * from "./saved-search.js";
 export * from "./skill.js";
