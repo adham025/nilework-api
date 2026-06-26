@@ -8,6 +8,7 @@ import type {
   PaginationQuery,
   Wallet,
 } from "@nilework/schemas";
+import type { Sql, TransactionSql } from "postgres";
 
 const WALLET_COLUMNS = `
   id, profile_id, balance_usd_minor, pending_usd_minor, created_at, updated_at
@@ -78,12 +79,16 @@ export interface PostLedgerEntryParams {
 /**
  * Post an immutable ledger entry and shift the wallet's matching balance in one
  * transaction, via the post_ledger_entry() SQL function — the ONLY sanctioned way
- * money moves (§5.1, §6). Escrow/payout/promo flows in later slices call this and
- * never write a wallet balance by hand. Overdrafts are rejected atomically by the
- * wallet's CHECK constraints (the call throws).
+ * money moves (§5.1, §6). Escrow/payout/promo flows call this and never write a
+ * wallet balance by hand. Overdrafts are rejected atomically by the wallet's CHECK
+ * constraints (the call throws). Pass a transaction handle (`db`) to compose this
+ * with other writes — e.g. an order status change — in a single atomic unit.
  */
-export async function postLedgerEntry(params: PostLedgerEntryParams): Promise<LedgerEntry> {
-  const sql = getDb();
+export async function postLedgerEntry(
+  params: PostLedgerEntryParams,
+  db: Sql | TransactionSql = getDb(),
+): Promise<LedgerEntry> {
+  const sql = db;
   const rows = await sql<LedgerEntry[]>`
     select ${sql.unsafe(LEDGER_COLUMNS)}
     from public.post_ledger_entry(

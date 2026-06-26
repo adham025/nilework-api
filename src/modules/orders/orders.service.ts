@@ -1,0 +1,364 @@
+import { getDb } from "@/core/db";
+import { getPublicConfig } from "@/modules/config/config.service";
+import { getLatestRate } from "@/modules/fx/fx.service";
+import { ensureProfile } from "@/modules/profiles/profiles.service";
+import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
+import type {
+  Order,
+  OrderDetail,
+  OrderEvent,
+  OrderListQuery,
+  OrderListResponse,
+  OrderStatus,
+  OrderWithParties,
+} from "@nilework/schemas";
+import type { TransactionSql } from "postgres";
+
+/** Typed error so routes can map state-machine failures to HTTP codes. */
+export class OrderError extends Error {
+  constructor(
+    public code: "not_found" | "forbidden" | "conflict",
+    message: string,
+  ) {
+    super(message);
+    this.name = "OrderError";
+  }
+}
+
+const ORDER_COLUMNS = `
+  id, client_id, freelancer_id, gig_id, title,
+  gross_usd_minor, commission_usd_minor, net_usd_minor, commission_bps,
+  fx_rate_id, delivery_days, status, delivered_at, released_at, auto_release_at,
+  created_at, updated_at
+`;
+
+const PARTY_JSON = (alias: string) =>
+  `json_build_object('id', ${alias}.id, 'display_name', ${alias}.display_name, 'avatar_url', ${alias}.avatar_url)`;
+
+/**
+ * Split a gross amount into platform commission and freelancer net. Commission is
+ * floored (the platform never over-charges by a rounding cent), so net absorbs the
+ * remainder and gross = commission + net always holds. Pure + unit-tested.
+ */
+export function splitCommission(
+  grossUsdMinor: number,
+  commissionBps: number,
+): { commission: number; net: number } {
+  const commission = Math.floor((grossUsdMinor * commissionBps) / 10000);
+  return { commission, net: grossUsdMinor - commission };
+}
+
+/** Create an order by purchasing an active gig. Status starts at pending_payment. */
+export async function createOrder(clientId: string, gigId: string): Promise<OrderDetail> {
+  const sql = getDb();
+  await ensureProfile(clientId);
+
+  const gigs = await sql<
+    { freelancer_id: string; title: string; price_usd_minor: number; delivery_days: number }[]
+  >`
+    select freelancer_id, title, price_usd_minor, delivery_days
+    from public.gigs
+    where id = ${gigId} and status = 'active'
+    limit 1
+  `;
+  const gig = gigs[0];
+  if (!gig) throw new OrderError("not_found", "Gig not found or not available");
+  if (gig.freelancer_id === clientId) {
+    throw new OrderError("conflict", "You cannot order your own gig");
+  }
+
+  const { commission_bps } = await getPublicConfig();
+  const { commission, net } = splitCommission(gig.price_usd_minor, commission_bps);
+  const fx = await getLatestRate();
+  await ensureWallet(gig.freelancer_id);
+
+  const order = await sql.begin(async (tx) => {
+    const rows = await tx<Order[]>`
+      insert into public.orders
+        (client_id, freelancer_id, gig_id, title, gross_usd_minor, commission_usd_minor,
+         net_usd_minor, commission_bps, fx_rate_id, delivery_days)
+      values
+        (${clientId}, ${gig.freelancer_id}, ${gigId}, ${gig.title}, ${gig.price_usd_minor},
+         ${commission}, ${net}, ${commission_bps}, ${fx?.id ?? null}, ${gig.delivery_days})
+      returning ${tx.unsafe(ORDER_COLUMNS)}
+    `;
+    // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
+    const created = rows[0]!;
+    await recordEvent(tx, created.id, null, "pending_payment", clientId, "client", "Order created");
+    return created;
+  });
+
+  return loadDetail(order.id);
+}
+
+/**
+ * Confirm payment → fund escrow. Credits the freelancer's pending balance with the
+ * net amount in the same transaction as the status change (§6). In a later slice the
+ * trigger moves from this client-called endpoint to the verified Paymob webhook.
+ */
+export async function confirmPayment(orderId: string, actorId: string): Promise<OrderDetail> {
+  const sql = getDb();
+  await sql.begin(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (order.client_id !== actorId) throw new OrderError("forbidden", "Not your order");
+    requireStatus(order, "pending_payment");
+
+    const wallet = await ensureWallet(order.freelancer_id);
+    await postLedgerEntry(
+      {
+        walletId: wallet.id,
+        entryType: "escrow_fund",
+        bucket: "pending",
+        amountUsdMinor: order.net_usd_minor,
+        referenceType: "order",
+        referenceId: order.id,
+        fxRateId: order.fx_rate_id,
+        memo: "Escrow funded",
+      },
+      tx,
+    );
+    await tx`update public.orders set status = 'funded' where id = ${orderId}`;
+    await recordEvent(
+      tx,
+      orderId,
+      "pending_payment",
+      "funded",
+      actorId,
+      "client",
+      "Payment confirmed",
+    );
+  });
+  return loadDetail(orderId);
+}
+
+/** Freelancer marks the order delivered, starting the client review / auto-release window. */
+export async function markDelivered(orderId: string, actorId: string): Promise<OrderDetail> {
+  const sql = getDb();
+  const { payout_hold_days } = await getPublicConfig();
+  await sql.begin(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (order.freelancer_id !== actorId) throw new OrderError("forbidden", "Not your order");
+    requireStatus(order, "funded");
+
+    await tx`
+      update public.orders
+      set status = 'delivered',
+          delivered_at = now(),
+          auto_release_at = now() + (${payout_hold_days} || ' days')::interval
+      where id = ${orderId}
+    `;
+    await recordEvent(tx, orderId, "funded", "delivered", actorId, "freelancer", "Work delivered");
+  });
+  return loadDetail(orderId);
+}
+
+/**
+ * Release escrow to the freelancer: move net from pending → available (two ledger
+ * entries) and mark the order released — all atomic. Callable by the client, or by
+ * the settle-holds sweep once the review window lapses (actorRole 'system').
+ */
+export async function releaseEscrow(
+  orderId: string,
+  actorId: string | null,
+  actorRole: "client" | "system",
+): Promise<OrderDetail> {
+  const sql = getDb();
+  await sql.begin(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (actorRole === "client" && order.client_id !== actorId) {
+      throw new OrderError("forbidden", "Not your order");
+    }
+    requireStatus(order, "delivered");
+
+    const wallet = await ensureWallet(order.freelancer_id);
+    await postLedgerEntry(
+      {
+        walletId: wallet.id,
+        entryType: "escrow_release",
+        bucket: "pending",
+        amountUsdMinor: -order.net_usd_minor,
+        referenceType: "order",
+        referenceId: order.id,
+        fxRateId: order.fx_rate_id,
+        memo: "Escrow released (out of hold)",
+      },
+      tx,
+    );
+    await postLedgerEntry(
+      {
+        walletId: wallet.id,
+        entryType: "escrow_release",
+        bucket: "available",
+        amountUsdMinor: order.net_usd_minor,
+        referenceType: "order",
+        referenceId: order.id,
+        fxRateId: order.fx_rate_id,
+        memo: "Escrow released (now withdrawable)",
+      },
+      tx,
+    );
+    await tx`update public.orders set status = 'released', released_at = now() where id = ${orderId}`;
+    await recordEvent(
+      tx,
+      orderId,
+      "delivered",
+      "released",
+      actorId,
+      actorRole,
+      actorRole === "system" ? "Auto-released after review window" : "Client released payment",
+    );
+  });
+  return loadDetail(orderId);
+}
+
+/** Client cancels an order that was never funded. No money has moved, so no ledger entry. */
+export async function cancelOrder(orderId: string, actorId: string): Promise<OrderDetail> {
+  const sql = getDb();
+  await sql.begin(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (order.client_id !== actorId) throw new OrderError("forbidden", "Not your order");
+    requireStatus(order, "pending_payment");
+    await tx`update public.orders set status = 'cancelled' where id = ${orderId}`;
+    await recordEvent(
+      tx,
+      orderId,
+      "pending_payment",
+      "cancelled",
+      actorId,
+      "client",
+      "Order cancelled",
+    );
+  });
+  return loadDetail(orderId);
+}
+
+/**
+ * Settle-holds sweep (worker): auto-release every delivered order whose review
+ * window has lapsed. Each release is its own transaction, so one failure can't
+ * block the rest. Returns the number released.
+ */
+export async function settleHolds(): Promise<number> {
+  const sql = getDb();
+  const due = await sql<{ id: string }[]>`
+    select id from public.orders
+    where status = 'delivered' and auto_release_at is not null and auto_release_at <= now()
+    order by auto_release_at
+    limit 200
+  `;
+  let released = 0;
+  for (const { id } of due) {
+    try {
+      await releaseEscrow(id, null, "system");
+      released++;
+    } catch {
+      // Skip and let the next sweep retry; never let one bad row stall the batch.
+    }
+  }
+  return released;
+}
+
+export async function listMyOrders(
+  viewerId: string,
+  query: OrderListQuery,
+): Promise<OrderListResponse> {
+  const sql = getDb();
+  const { limit } = query;
+  const roleFilter =
+    query.role === "client"
+      ? sql`o.client_id = ${viewerId}`
+      : query.role === "freelancer"
+        ? sql`o.freelancer_id = ${viewerId}`
+        : sql`(o.client_id = ${viewerId} or o.freelancer_id = ${viewerId})`;
+
+  const rows = await sql<OrderWithParties[]>`
+    select
+      ${sql.unsafe(prefixed(ORDER_COLUMNS, "o"))},
+      ${sql.unsafe(PARTY_JSON("c"))} as client,
+      ${sql.unsafe(PARTY_JSON("f"))} as freelancer
+    from public.orders o
+    join public.profiles c on c.id = o.client_id
+    join public.profiles f on f.id = o.freelancer_id
+    where ${roleFilter}
+      ${query.cursor ? sql`and o.created_at < ${query.cursor}` : sql``}
+    order by o.created_at desc
+    limit ${limit + 1}
+  `;
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  return { items, next_cursor: hasMore ? (items.at(-1)?.created_at ?? null) : null };
+}
+
+/** Party-scoped order detail with the full event timeline. */
+export async function getOrder(orderId: string, viewerId: string): Promise<OrderDetail> {
+  const detail = await loadDetail(orderId);
+  if (detail.client_id !== viewerId && detail.freelancer_id !== viewerId) {
+    throw new OrderError("not_found", "Order not found");
+  }
+  return detail;
+}
+
+// --- internals -------------------------------------------------------------
+
+type Tx = TransactionSql;
+
+function prefixed(columns: string, alias: string): string {
+  return columns
+    .split(",")
+    .map((c) => `${alias}.${c.trim()}`)
+    .join(", ");
+}
+
+function requireStatus(order: Order, expected: OrderStatus): void {
+  if (order.status !== expected) {
+    throw new OrderError("conflict", `Order is ${order.status}, expected ${expected}`);
+  }
+}
+
+async function lockOrder(tx: Tx, orderId: string): Promise<Order> {
+  const rows = await tx<Order[]>`
+    select ${tx.unsafe(ORDER_COLUMNS)} from public.orders where id = ${orderId} for update
+  `;
+  const order = rows[0];
+  if (!order) throw new OrderError("not_found", "Order not found");
+  return order;
+}
+
+async function recordEvent(
+  tx: Tx,
+  orderId: string,
+  fromStatus: OrderStatus | null,
+  toStatus: OrderStatus,
+  actorId: string | null,
+  actorRole: "client" | "freelancer" | "system",
+  note: string,
+): Promise<void> {
+  await tx`
+    insert into public.order_events (order_id, from_status, to_status, actor_id, actor_role, note)
+    values (${orderId}, ${fromStatus}, ${toStatus}, ${actorId}, ${actorRole}, ${note})
+  `;
+}
+
+async function loadDetail(orderId: string): Promise<OrderDetail> {
+  const sql = getDb();
+  const rows = await sql<OrderWithParties[]>`
+    select
+      ${sql.unsafe(prefixed(ORDER_COLUMNS, "o"))},
+      ${sql.unsafe(PARTY_JSON("c"))} as client,
+      ${sql.unsafe(PARTY_JSON("f"))} as freelancer
+    from public.orders o
+    join public.profiles c on c.id = o.client_id
+    join public.profiles f on f.id = o.freelancer_id
+    where o.id = ${orderId}
+    limit 1
+  `;
+  const order = rows[0];
+  if (!order) throw new OrderError("not_found", "Order not found");
+
+  const events = await sql<OrderEvent[]>`
+    select id, order_id, from_status, to_status, actor_id, actor_role, note, created_at
+    from public.order_events
+    where order_id = ${orderId}
+    order by created_at
+  `;
+  return { ...order, events };
+}

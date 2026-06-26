@@ -10,4 +10,5 @@ export * from "./fx.js";
 export * from "./gig.js";
 export * from "./health.js";
 export * from "./money.js";
+export * from "./order.js";
 export * from "./profile.js";
