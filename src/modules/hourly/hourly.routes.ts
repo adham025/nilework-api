@@ -141,9 +141,11 @@ export async function hourlyRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) =>
-      run(reply, () => approveLog(req.params.id, req.params.logId, req.authUser!.id)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      return run(reply, () => approveLog(req.params.id, req.params.logId, userId));
+    },
   );
 
   r.post(

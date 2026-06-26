@@ -1,5 +1,6 @@
 import { corsOrigins, isProd } from "@/core/env";
 import { adminRoutes } from "@/modules/admin/admin.routes";
+import { agencyRoutes } from "@/modules/agencies/agencies.routes";
 import { categoryRoutes } from "@/modules/categories/categories.routes";
 import { configRoutes } from "@/modules/config/config.routes";
 import { conversationRoutes } from "@/modules/conversations/conversations.routes";
@@ -80,6 +81,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(levelRoutes, { prefix: "/v1" });
   await app.register(skillRoutes, { prefix: "/v1" });
   await app.register(savedSearchRoutes, { prefix: "/v1" });
+  await app.register(agencyRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });
   await app.register(gamificationRoutes, { prefix: "/v1" });
   await app.register(redemptionRoutes, { prefix: "/v1" });

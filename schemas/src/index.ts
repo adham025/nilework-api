@@ -2,6 +2,7 @@
 // shared by nilework-api (request validation) and nilework-web (form validation),
 // per MASTER_PLAN §6.6.
 
+export * from "./agency.js";
 export * from "./branded.js";
 export * from "./category.js";
 export * from "./common.js";
