@@ -13,6 +13,7 @@ export * from "./gamification.js";
 export * from "./fx.js";
 export * from "./gig.js";
 export * from "./health.js";
+export * from "./hourly.js";
 export * from "./identity.js";
 export * from "./level.js";
 export * from "./milestone.js";
