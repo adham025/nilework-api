@@ -13,6 +13,7 @@ export * from "./fx.js";
 export * from "./gig.js";
 export * from "./health.js";
 export * from "./identity.js";
+export * from "./level.js";
 export * from "./money.js";
 export * from "./notification.js";
 export * from "./offer.js";
