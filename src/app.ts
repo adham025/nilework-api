@@ -21,6 +21,7 @@ import { profileRoutes } from "@/modules/profiles/profiles.routes";
 import { promoRoutes } from "@/modules/promo/promo.routes";
 import { redemptionRoutes } from "@/modules/redemptions/redemptions.routes";
 import { reviewRoutes } from "@/modules/reviews/reviews.routes";
+import { skillRoutes } from "@/modules/skills/skills.routes";
 import { walletRoutes } from "@/modules/wallet/wallet.routes";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -74,6 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(conversationRoutes, { prefix: "/v1" });
   await app.register(reviewRoutes, { prefix: "/v1" });
   await app.register(levelRoutes, { prefix: "/v1" });
+  await app.register(skillRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });
   await app.register(gamificationRoutes, { prefix: "/v1" });
   await app.register(redemptionRoutes, { prefix: "/v1" });
