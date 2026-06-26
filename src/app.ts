@@ -5,6 +5,7 @@ import { conversationRoutes } from "@/modules/conversations/conversations.routes
 import { fxRoutes } from "@/modules/fx/fx.routes";
 import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
+import { offerRoutes } from "@/modules/offers/offers.routes";
 import { orderRoutes } from "@/modules/orders/orders.routes";
 import { paymentRoutes } from "@/modules/payments/payments.routes";
 import { payoutRoutes } from "@/modules/payouts/payouts.routes";
@@ -55,6 +56,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(categoryRoutes, { prefix: "/v1" });
   await app.register(gigRoutes, { prefix: "/v1" });
   await app.register(orderRoutes, { prefix: "/v1" });
+  await app.register(offerRoutes, { prefix: "/v1" });
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(payoutRoutes, { prefix: "/v1" });
   await app.register(conversationRoutes, { prefix: "/v1" });

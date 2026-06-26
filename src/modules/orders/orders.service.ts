@@ -48,6 +48,49 @@ export function splitCommission(
   return { commission, net: grossUsdMinor - commission };
 }
 
+export interface NewOrderInput {
+  clientId: string;
+  freelancerId: string;
+  gigId: string | null;
+  title: string;
+  grossUsdMinor: number;
+  deliveryDays: number;
+}
+
+/**
+ * Insert a pending_payment order + its opening event inside a caller's transaction,
+ * snapshotting the commission rate and FX rate at order time. The single shared
+ * order-creation path: a gig purchase (createOrder) and an accepted custom offer
+ * (offers.acceptOffer) both go through here, so commission/FX/ledger logic lives once.
+ */
+export async function insertOrder(tx: Tx, input: NewOrderInput): Promise<Order> {
+  const { commission_bps } = await getPublicConfig();
+  const { commission, net } = splitCommission(input.grossUsdMinor, commission_bps);
+  const fx = await getLatestRate();
+
+  const rows = await tx<Order[]>`
+    insert into public.orders
+      (client_id, freelancer_id, gig_id, title, gross_usd_minor, commission_usd_minor,
+       net_usd_minor, commission_bps, fx_rate_id, delivery_days)
+    values
+      (${input.clientId}, ${input.freelancerId}, ${input.gigId}, ${input.title}, ${input.grossUsdMinor},
+       ${commission}, ${net}, ${commission_bps}, ${fx?.id ?? null}, ${input.deliveryDays})
+    returning ${tx.unsafe(ORDER_COLUMNS)}
+  `;
+  // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
+  const created = rows[0]!;
+  await recordEvent(
+    tx,
+    created.id,
+    null,
+    "pending_payment",
+    input.clientId,
+    "client",
+    "Order created",
+  );
+  return created;
+}
+
 /** Create an order by purchasing an active gig. Status starts at pending_payment. */
 export async function createOrder(clientId: string, gigId: string): Promise<OrderDetail> {
   const sql = getDb();
@@ -67,26 +110,16 @@ export async function createOrder(clientId: string, gigId: string): Promise<Orde
     throw new OrderError("conflict", "You cannot order your own gig");
   }
 
-  const { commission_bps } = await getPublicConfig();
-  const { commission, net } = splitCommission(gig.price_usd_minor, commission_bps);
-  const fx = await getLatestRate();
-  await ensureWallet(gig.freelancer_id);
-
-  const order = await sql.begin(async (tx) => {
-    const rows = await tx<Order[]>`
-      insert into public.orders
-        (client_id, freelancer_id, gig_id, title, gross_usd_minor, commission_usd_minor,
-         net_usd_minor, commission_bps, fx_rate_id, delivery_days)
-      values
-        (${clientId}, ${gig.freelancer_id}, ${gigId}, ${gig.title}, ${gig.price_usd_minor},
-         ${commission}, ${net}, ${commission_bps}, ${fx?.id ?? null}, ${gig.delivery_days})
-      returning ${tx.unsafe(ORDER_COLUMNS)}
-    `;
-    // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
-    const created = rows[0]!;
-    await recordEvent(tx, created.id, null, "pending_payment", clientId, "client", "Order created");
-    return created;
-  });
+  const order = await sql.begin((tx) =>
+    insertOrder(tx, {
+      clientId,
+      freelancerId: gig.freelancer_id,
+      gigId,
+      title: gig.title,
+      grossUsdMinor: gig.price_usd_minor,
+      deliveryDays: gig.delivery_days,
+    }),
+  );
 
   return loadDetail(order.id);
 }

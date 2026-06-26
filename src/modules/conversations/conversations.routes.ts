@@ -109,9 +109,11 @@ export async function conversationRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) =>
-      run(reply, () => listMessages(req.params.id, req.authUser!.id, req.query)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      return run(reply, () => listMessages(req.params.id, userId, req.query));
+    },
   );
 
   r.post(
