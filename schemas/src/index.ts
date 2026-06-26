@@ -6,6 +6,7 @@ export * from "./branded.js";
 export * from "./category.js";
 export * from "./common.js";
 export * from "./config.js";
+export * from "./conversation.js";
 export * from "./fx.js";
 export * from "./gig.js";
 export * from "./health.js";

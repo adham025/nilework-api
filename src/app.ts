@@ -1,6 +1,7 @@
 import { corsOrigins, isProd } from "@/core/env";
 import { categoryRoutes } from "@/modules/categories/categories.routes";
 import { configRoutes } from "@/modules/config/config.routes";
+import { conversationRoutes } from "@/modules/conversations/conversations.routes";
 import { fxRoutes } from "@/modules/fx/fx.routes";
 import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
@@ -56,6 +57,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(orderRoutes, { prefix: "/v1" });
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(payoutRoutes, { prefix: "/v1" });
+  await app.register(conversationRoutes, { prefix: "/v1" });
   await app.register(walletRoutes, { prefix: "/v1" });
   await app.register(fxRoutes, { prefix: "/v1" });
   await app.register(configRoutes, { prefix: "/v1" });
