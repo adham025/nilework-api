@@ -1,0 +1,35 @@
+# Fly.io config for nilework-api (MASTER_PLAN §6). Two process groups from one
+# image: `app` (HTTP) and `worker` (pg-boss cron). Migrations run on each deploy
+# via release_command. Set secrets with `fly secrets set KEY=...` (see .env.example).
+app = "nilework-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Apply forward-only migrations before the new version goes live.
+  release_command = "node scripts/migrate.mjs"
+
+[processes]
+  app = "node dist/server.js"
+  worker = "node dist/worker.js"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[http_service.checks]]
+  method = "GET"
+  path = "/v1/health"
+  interval = "15s"
+  timeout = "3s"
+  grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
