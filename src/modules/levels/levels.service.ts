@@ -1,5 +1,5 @@
 import { getDb } from "@/core/db";
-import type { FreelancerLevel, FreelancerTier } from "@nilework/schemas";
+import type { ClientLevel, ClientTier, FreelancerLevel, FreelancerTier } from "@nilework/schemas";
 
 /**
  * Pro Path thresholds (§5.3). Tiers are earned from real outcomes — completed
@@ -92,5 +92,49 @@ export async function computeFreelancerLevel(profileId: string): Promise<Freelan
     review_count: reviews,
     next_level: next,
     orders_to_next: ordersToNext,
+  };
+}
+
+// --- client loyalty tiers (§5.3) -------------------------------------------
+
+/** Lifetime-spend thresholds (USD minor) for each client tier. */
+const CLIENT_TIERS = { silver: 50_000, gold: 200_000, platinum: 1_000_000 } as const;
+const CLIENT_ORDER: ClientTier[] = ["standard", "silver", "gold", "platinum"];
+
+/** Pure: client tier + spend remaining to the next, from lifetime spend. */
+export function clientTierFor(spentUsdMinor: number): {
+  level: ClientTier;
+  next: ClientTier | null;
+  spendToNext: number | null;
+} {
+  let level: ClientTier = "standard";
+  if (spentUsdMinor >= CLIENT_TIERS.platinum) level = "platinum";
+  else if (spentUsdMinor >= CLIENT_TIERS.gold) level = "gold";
+  else if (spentUsdMinor >= CLIENT_TIERS.silver) level = "silver";
+
+  const next = CLIENT_ORDER[CLIENT_ORDER.indexOf(level) + 1] ?? null;
+  const spendToNext =
+    next && next in CLIENT_TIERS
+      ? Math.max(0, CLIENT_TIERS[next as keyof typeof CLIENT_TIERS] - spentUsdMinor)
+      : null;
+  return { level, next, spendToNext };
+}
+
+/** Compute a client's loyalty tier from their lifetime completed spend. */
+export async function computeClientLevel(profileId: string): Promise<ClientLevel> {
+  const sql = getDb();
+  const rows = await sql<{ spent: number; orders: number }[]>`
+    select coalesce(sum(gross_usd_minor), 0)::bigint as spent, count(*)::int as orders
+    from public.orders where client_id = ${profileId} and status = 'released'
+  `;
+  const spent = rows[0]?.spent ?? 0;
+  const orders = rows[0]?.orders ?? 0;
+  const { level, next, spendToNext } = clientTierFor(spent);
+  return {
+    level,
+    total_spent_usd_minor: spent,
+    completed_orders: orders,
+    next_level: next,
+    spend_to_next_usd_minor: spendToNext,
   };
 }

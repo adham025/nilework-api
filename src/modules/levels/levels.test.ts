@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tierCommissionBps, tierFor, tierHoldDays } from "./levels.service";
+import { clientTierFor, tierCommissionBps, tierFor, tierHoldDays } from "./levels.service";
 
 describe("tierFor (Pro Path)", () => {
   it("is new with no completed orders", () => {
@@ -47,5 +47,24 @@ describe("tier perks", () => {
     expect(tierHoldDays("new", 3)).toBe(3);
     expect(tierHoldDays("pro", 3)).toBe(2);
     expect(tierHoldDays("elite", 3)).toBe(1);
+  });
+});
+
+describe("clientTierFor", () => {
+  it("is standard below the first threshold", () => {
+    const r = clientTierFor(40_000);
+    expect(r.level).toBe("standard");
+    expect(r.next).toBe("silver");
+    expect(r.spendToNext).toBe(10_000);
+  });
+  it("climbs with spend", () => {
+    expect(clientTierFor(50_000).level).toBe("silver");
+    expect(clientTierFor(200_000).level).toBe("gold");
+    expect(clientTierFor(1_000_000).level).toBe("platinum");
+  });
+  it("has no next level at platinum", () => {
+    const r = clientTierFor(2_000_000);
+    expect(r.next).toBeNull();
+    expect(r.spendToNext).toBeNull();
   });
 });
