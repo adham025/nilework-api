@@ -18,4 +18,5 @@ export * from "./order.js";
 export * from "./payment.js";
 export * from "./payout.js";
 export * from "./profile.js";
+export * from "./promo.js";
 export * from "./review.js";

@@ -60,7 +60,10 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-      const order = await run(reply, () => createOrder(req.authUser!.id, req.body.gig_id));
+      const userId = req.authUser!.id;
+      const order = await run(reply, () =>
+        createOrder(userId, req.body.gig_id, req.body.promo_code),
+      );
       if (order) return reply.code(201).send(order);
     },
   );

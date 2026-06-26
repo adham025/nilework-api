@@ -18,13 +18,13 @@ export const ACHIEVEMENTS: Record<string, { points: number }> = {
 /** Points each side earns when a referral qualifies. */
 const REFERRAL_POINTS = 200;
 
-/** Append a points entry (best-effort). Internal — all earns route through here. */
-async function addPoints(
+/** Append a points entry. All earns route through here (the §5.3 substrate). */
+export async function grantPoints(
   profileId: string,
   points: number,
   reason: string,
-  referenceType: string | null,
-  referenceId: string | null,
+  referenceType: string | null = null,
+  referenceId: string | null = null,
 ): Promise<void> {
   const sql = getDb();
   await sql`
@@ -32,6 +32,9 @@ async function addPoints(
     values (${profileId}, ${points}, ${reason}, ${referenceType}, ${referenceId})
   `;
 }
+
+/** Internal alias kept for readability at existing call sites. */
+const addPoints = grantPoints;
 
 /**
  * Award a milestone badge once. Idempotent via the (profile, key) UNIQUE — calling

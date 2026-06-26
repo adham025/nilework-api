@@ -4,6 +4,7 @@ import { getLatestRate } from "@/modules/fx/fx.service";
 import { awardAchievement, qualifyReferral } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
+import { checkPromo, recordRedemption } from "@/modules/promo/promo.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
 import type {
   Order,
@@ -57,6 +58,8 @@ export interface NewOrderInput {
   title: string;
   grossUsdMinor: number;
   deliveryDays: number;
+  /** Override the commission rate (e.g. a promo fee_waiver); defaults to app config. */
+  commissionBpsOverride?: number;
 }
 
 /**
@@ -66,7 +69,7 @@ export interface NewOrderInput {
  * (offers.acceptOffer) both go through here, so commission/FX/ledger logic lives once.
  */
 export async function insertOrder(tx: Tx, input: NewOrderInput): Promise<Order> {
-  const { commission_bps } = await getPublicConfig();
+  const commission_bps = input.commissionBpsOverride ?? (await getPublicConfig()).commission_bps;
   const { commission, net } = splitCommission(input.grossUsdMinor, commission_bps);
   const fx = await getLatestRate();
 
@@ -94,7 +97,11 @@ export async function insertOrder(tx: Tx, input: NewOrderInput): Promise<Order> 
 }
 
 /** Create an order by purchasing an active gig. Status starts at pending_payment. */
-export async function createOrder(clientId: string, gigId: string): Promise<OrderDetail> {
+export async function createOrder(
+  clientId: string,
+  gigId: string,
+  promoCode?: string,
+): Promise<OrderDetail> {
   const sql = getDb();
   await ensureProfile(clientId);
 
@@ -112,16 +119,33 @@ export async function createOrder(clientId: string, gigId: string): Promise<Orde
     throw new OrderError("conflict", "You cannot order your own gig");
   }
 
-  const order = await sql.begin((tx) =>
-    insertOrder(tx, {
+  const order = await sql.begin(async (tx) => {
+    // Apply a fee-waiver promo (§4.4 launch subsidy) atomically with the order.
+    let commissionBpsOverride: number | undefined;
+    let promoId: string | undefined;
+    if (promoCode) {
+      const baseBps = (await getPublicConfig()).commission_bps;
+      const res = await checkPromo(tx, promoCode, clientId);
+      if (!res.ok) throw new OrderError("conflict", `Promo code not valid: ${res.reason}`);
+      if (res.promo.type !== "fee_waiver") {
+        throw new OrderError("conflict", "This code can't be applied to an order");
+      }
+      commissionBpsOverride = Math.max(0, baseBps - res.promo.value);
+      promoId = res.promo.id;
+    }
+
+    const created = await insertOrder(tx, {
       clientId,
       freelancerId: gig.freelancer_id,
       gigId,
       title: gig.title,
       grossUsdMinor: gig.price_usd_minor,
       deliveryDays: gig.delivery_days,
-    }),
-  );
+      ...(commissionBpsOverride !== undefined ? { commissionBpsOverride } : {}),
+    });
+    if (promoId) await recordRedemption(tx, promoId, clientId, created.id);
+    return created;
+  });
 
   await awardAchievement(clientId, "first_order");
   return loadDetail(order.id);

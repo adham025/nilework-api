@@ -1,4 +1,5 @@
 import { corsOrigins, isProd } from "@/core/env";
+import { adminRoutes } from "@/modules/admin/admin.routes";
 import { categoryRoutes } from "@/modules/categories/categories.routes";
 import { configRoutes } from "@/modules/config/config.routes";
 import { conversationRoutes } from "@/modules/conversations/conversations.routes";
@@ -12,6 +13,7 @@ import { orderRoutes } from "@/modules/orders/orders.routes";
 import { paymentRoutes } from "@/modules/payments/payments.routes";
 import { payoutRoutes } from "@/modules/payouts/payouts.routes";
 import { profileRoutes } from "@/modules/profiles/profiles.routes";
+import { promoRoutes } from "@/modules/promo/promo.routes";
 import { reviewRoutes } from "@/modules/reviews/reviews.routes";
 import { walletRoutes } from "@/modules/wallet/wallet.routes";
 import cors from "@fastify/cors";
@@ -66,6 +68,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(reviewRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });
   await app.register(gamificationRoutes, { prefix: "/v1" });
+  await app.register(promoRoutes, { prefix: "/v1" });
+  await app.register(adminRoutes, { prefix: "/v1" });
   await app.register(walletRoutes, { prefix: "/v1" });
   await app.register(fxRoutes, { prefix: "/v1" });
   await app.register(configRoutes, { prefix: "/v1" });

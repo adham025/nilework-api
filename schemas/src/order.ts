@@ -72,9 +72,10 @@ export const OrderDetailSchema = OrderWithPartiesSchema.extend({
 });
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
 
-/** Create an order by purchasing a gig (client action). */
+/** Create an order by purchasing a gig (client action), optionally with a promo code. */
 export const OrderCreateSchema = z.object({
   gig_id: z.string().uuid(),
+  promo_code: z.string().min(3).max(40).optional(),
 });
 export type OrderCreateInput = z.infer<typeof OrderCreateSchema>;
 
