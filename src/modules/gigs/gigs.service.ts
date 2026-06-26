@@ -67,7 +67,11 @@ export async function listGigs(query: GigListQuery): Promise<GigListResponse> {
     where g.status = 'active'
       ${query.category ? sql`and c.slug = ${query.category}` : sql``}
       ${query.cursor ? sql`and g.created_at < ${query.cursor}` : sql``}
-    order by g.created_at desc
+    -- Featured gigs float to the top of the first page (§5.3 redemption reward);
+    -- deeper pages page purely by created_at to keep the cursor consistent.
+    order by
+      ${query.cursor ? sql`` : sql`coalesce(g.featured_until > now(), false) desc,`}
+      g.created_at desc
     limit ${limit + 1}
   `;
 

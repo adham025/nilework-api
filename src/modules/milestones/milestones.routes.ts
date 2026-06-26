@@ -59,8 +59,11 @@ export async function milestoneRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) => run(reply, () => listMilestones(req.params.id, req.authUser!.id)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      return run(reply, () => listMilestones(req.params.id, userId));
+    },
   );
 
   r.post(
@@ -84,9 +87,8 @@ export async function milestoneRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-      const list = await run(reply, () =>
-        createMilestones(req.params.id, req.authUser!.id, req.body),
-      );
+      const userId = req.authUser!.id;
+      const list = await run(reply, () => createMilestones(req.params.id, userId, req.body));
       if (list) return reply.code(201).send(list);
     },
   );
@@ -108,9 +110,11 @@ export async function milestoneRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) =>
-      run(reply, () => deliverMilestone(req.params.id, req.params.mid, req.authUser!.id)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      return run(reply, () => deliverMilestone(req.params.id, req.params.mid, userId));
+    },
   );
 
   r.post(
@@ -130,8 +134,10 @@ export async function milestoneRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-    async (req, reply) =>
-      run(reply, () => releaseMilestone(req.params.id, req.params.mid, req.authUser!.id)),
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      return run(reply, () => releaseMilestone(req.params.id, req.params.mid, userId));
+    },
   );
 }

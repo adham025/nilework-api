@@ -201,12 +201,8 @@ export async function releaseMilestone(
       `;
     }
     // biome-ignore lint/style/noNonNullAssertion: update...returning yields the row.
-    return {
-      milestone: rows[0]!,
-      allReleased,
-      clientId: order.client_id,
-      freelancerId: order.freelancer_id,
-    };
+    const milestone = rows[0]!;
+    return { milestone, allReleased, clientId: order.client_id, freelancerId: order.freelancer_id };
   });
 
   await notify(result.freelancerId, "order_released", { order_id: orderId });
