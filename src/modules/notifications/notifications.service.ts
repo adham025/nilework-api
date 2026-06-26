@@ -1,5 +1,6 @@
 import { getDb } from "@/core/db";
 import type { Notification, NotificationListResponse, PaginationQuery } from "@nilework/schemas";
+import { dispatchEmail } from "./email";
 
 const COLUMNS = "id, user_id, type, data, read_at, created_at";
 
@@ -22,6 +23,8 @@ export async function notify(
   } catch (err) {
     console.error("notify failed:", err);
   }
+  // Email counterpart for money/deadline types (best-effort, no-op if unconfigured).
+  await dispatchEmail(userId, type);
 }
 
 export async function listNotifications(

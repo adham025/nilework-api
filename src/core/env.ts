@@ -23,8 +23,10 @@ const EnvSchema = z.object({
   // Observability.
   SENTRY_DSN: z.string().url().optional(),
 
-  // Email (Resend) — used by the notification worker (MASTER_PLAN §6.11).
+  // Email (Resend) — money/deadline notifications (MASTER_PLAN §6.11). When the
+  // key is unset, email is skipped (in-app notifications still work).
   RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().default("Nilework <noreply@nilework.com>"),
 
   // Paymob (Egypt payments, MASTER_PLAN §6). All optional: when unset, order
   // checkout runs in dev "simulation" mode and funds escrow directly, so the loop
