@@ -1,8 +1,11 @@
 import { corsOrigins, isProd } from "@/core/env";
 import { categoryRoutes } from "@/modules/categories/categories.routes";
+import { configRoutes } from "@/modules/config/config.routes";
+import { fxRoutes } from "@/modules/fx/fx.routes";
 import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
 import { profileRoutes } from "@/modules/profiles/profiles.routes";
+import { walletRoutes } from "@/modules/wallet/wallet.routes";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import swagger from "@fastify/swagger";
@@ -47,6 +50,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(profileRoutes, { prefix: "/v1" });
   await app.register(categoryRoutes, { prefix: "/v1" });
   await app.register(gigRoutes, { prefix: "/v1" });
+  await app.register(walletRoutes, { prefix: "/v1" });
+  await app.register(fxRoutes, { prefix: "/v1" });
+  await app.register(configRoutes, { prefix: "/v1" });
 
   return app;
 }

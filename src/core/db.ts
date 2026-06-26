@@ -30,6 +30,16 @@ export function getDb(): postgres.Sql {
           serialize: (x: string) => x,
           parse: (x: string) => x,
         },
+        // Return int8/bigint money columns (wallet balances, ledger amounts) as
+        // JS numbers, not the library's default string, so they validate against
+        // the z.number() money schemas. Safe: balances in USD minor units stay far
+        // below Number.MAX_SAFE_INTEGER (~$90T) for any realistic account (§6).
+        int8: {
+          to: 20,
+          from: [20],
+          serialize: (x: number) => x.toString(),
+          parse: (x: string) => Number(x),
+        },
       },
     });
   }
