@@ -7,6 +7,7 @@ import { fxRoutes } from "@/modules/fx/fx.routes";
 import { gamificationRoutes } from "@/modules/gamification/gamification.routes";
 import { gigRoutes } from "@/modules/gigs/gigs.routes";
 import { healthRoutes } from "@/modules/health/health.routes";
+import { identityRoutes } from "@/modules/identity/identity.routes";
 import { notificationRoutes } from "@/modules/notifications/notifications.routes";
 import { offerRoutes } from "@/modules/offers/offers.routes";
 import { orderRoutes } from "@/modules/orders/orders.routes";
@@ -69,6 +70,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(notificationRoutes, { prefix: "/v1" });
   await app.register(gamificationRoutes, { prefix: "/v1" });
   await app.register(promoRoutes, { prefix: "/v1" });
+  await app.register(identityRoutes, { prefix: "/v1" });
   await app.register(adminRoutes, { prefix: "/v1" });
   await app.register(walletRoutes, { prefix: "/v1" });
   await app.register(fxRoutes, { prefix: "/v1" });

@@ -34,6 +34,18 @@ const EnvSchema = z.object({
   PAYMOB_IFRAME_ID: z.string().optional(),
   PAYMOB_HMAC_SECRET: z.string().optional(),
 
+  // Phone OTP CPaaS (WhatsApp-first, SMS fallback — MASTER_PLAN §6). When unset,
+  // OTP runs in "log" mode (code printed to the server log) so the flow is testable
+  // locally without a provider/registered sender.
+  OTP_PROVIDER: z.enum(["cequens", "log"]).default("log"),
+  CEQUENS_API_KEY: z.string().optional(),
+  CEQUENS_SENDER: z.string().optional(),
+
+  // Live FX feed (MASTER_PLAN §6: replace the placeholder rate). Optional API key
+  // for the rate source consumed by the worker's scheduled refresh.
+  FX_API_URL: z.string().url().optional(),
+  FX_API_KEY: z.string().optional(),
+
   // Public base URL of the web app, for building post-payment redirect targets.
   WEB_BASE_URL: z.string().url().default("http://localhost:3000"),
 
