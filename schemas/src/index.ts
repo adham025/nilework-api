@@ -24,6 +24,7 @@ export * from "./offer.js";
 export * from "./order.js";
 export * from "./payment.js";
 export * from "./payout.js";
+export * from "./plan.js";
 export * from "./profile.js";
 export * from "./promo.js";
 export * from "./redemption.js";
