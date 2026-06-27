@@ -56,6 +56,18 @@ values ('<auth-user-uuid>', 'ops@nilework.com', 'super_admin');
 
 > Follow-up before real ops use: mandatory 2FA for admin (MASTER_PLAN §6.2).
 
+## 3b. Seed demo data (dev/staging only)
+
+To make a fresh environment immediately walkable, populate a few confirmed users
+(two freelancers, one client) and sample gigs:
+
+```sh
+DATABASE_URL=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npm run seed
+```
+
+Idempotent and safe to re-run; prints the shared demo password. Never run against
+production data.
+
 ## 4. nilework-web (Vercel)
 
 Import the repo in Vercel and set env vars (see `.env.example`):
@@ -63,7 +75,19 @@ Import the repo in Vercel and set env vars (see `.env.example`):
 `NEXT_PUBLIC_API_URL=https://<api-host>`, and optionally `NEXT_PUBLIC_GA_ID`.
 Add the Vercel domain to the API's `CORS_ORIGINS`.
 
-## 5. Go-live gate
+## 5. Smoke test (verify a deploy)
+
+Walk the public surface (and, with a key, authenticated `/me` endpoints):
+
+```sh
+API_BASE=https://<api-host> npm run smoke
+# also exercise authenticated routes with a key from /dashboard/api-keys:
+API_BASE=https://<api-host> NILEWORK_API_KEY=nw_... npm run smoke
+```
+
+Exits non-zero on the first failure, so it can gate a deploy in CI.
+
+## 6. Go-live gate
 
 Real EGP custody (live Paymob + payouts) is gated on the Egypt money-licensing /
 escrow-custody question (MASTER_PLAN §8/§12). Everything is fully testable against

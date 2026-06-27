@@ -13,6 +13,8 @@
     "start": "node dist/server.js",
     "worker": "tsx watch src/worker.ts",
     "migrate": "node scripts/migrate.mjs",
+    "seed": "node scripts/seed.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
