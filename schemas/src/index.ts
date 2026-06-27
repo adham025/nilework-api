@@ -3,6 +3,7 @@
 // per MASTER_PLAN §6.6.
 
 export * from "./agency.js";
+export * from "./apikey.js";
 export * from "./branded.js";
 export * from "./category.js";
 export * from "./common.js";
