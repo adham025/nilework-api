@@ -6,6 +6,7 @@ import { categoryRoutes } from "@/modules/categories/categories.routes";
 import { configRoutes } from "@/modules/config/config.routes";
 import { conversationRoutes } from "@/modules/conversations/conversations.routes";
 import { disputeRoutes } from "@/modules/disputes/disputes.routes";
+import { engagementRoutes } from "@/modules/engagement/engagement.routes";
 import { favoriteRoutes } from "@/modules/favorites/favorites.routes";
 import { fxRoutes } from "@/modules/fx/fx.routes";
 import { gamificationRoutes } from "@/modules/gamification/gamification.routes";
@@ -88,6 +89,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(apiKeyRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });
   await app.register(gamificationRoutes, { prefix: "/v1" });
+  await app.register(engagementRoutes, { prefix: "/v1" });
   await app.register(redemptionRoutes, { prefix: "/v1" });
   await app.register(promoRoutes, { prefix: "/v1" });
   await app.register(identityRoutes, { prefix: "/v1" });
