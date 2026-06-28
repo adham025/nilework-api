@@ -8,6 +8,13 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # Placeholder env so the app boots during tests (core/env validates at import).
+    # Tests never connect to these — guards just assert 401s; DB lookups degrade
+    # gracefully. Real values live in Fly secrets.
+    env:
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
