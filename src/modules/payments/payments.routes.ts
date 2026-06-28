@@ -4,7 +4,12 @@ import { ApiErrorSchema, CheckoutResponseSchema } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { PaymentError, handlePaymobWebhook, initiateCheckout } from "./payments.service";
+import {
+  PaymentError,
+  handleKashierWebhook,
+  handlePaymobWebhook,
+  initiateCheckout,
+} from "./payments.service";
 
 const ORDER_STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
 const PAYMENT_STATUS_BY_CODE = { unauthorized: 401, bad_request: 400, not_found: 404 } as const;
@@ -65,6 +70,37 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       try {
         await handlePaymobWebhook(req.body.obj, req.query.hmac ?? "");
+        return { received: true };
+      } catch (err) {
+        if (err instanceof PaymentError) {
+          return reply
+            .code(PAYMENT_STATUS_BY_CODE[err.code])
+            .send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // Kashier payment callback. Public, but signature-verified in the service.
+  r.post(
+    "/payments/kashier/webhook",
+    {
+      schema: {
+        tags: ["payments"],
+        summary: "Kashier payment webhook (signature-verified)",
+        body: z.record(z.unknown()),
+        response: {
+          200: z.object({ received: z.boolean() }),
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema,
+        },
+      },
+    },
+    async (req, reply) => {
+      try {
+        await handleKashierWebhook(req.body);
         return { received: true };
       } catch (err) {
         if (err instanceof PaymentError) {

@@ -22,10 +22,16 @@ Legend — **Stage:** when you first need it · **Req:** required to boot / func
 | `SENTRY_DSN` | Sentry → Project → Client Keys (DSN). Optional error tracking | 7 | ⬜ |
 | `RESEND_API_KEY` | resend.com → API Keys. Unset = in-app notifications only | 6 | ⬜ |
 | `RESEND_FROM` | A verified Resend sender, e.g. `Nilework <noreply@nilework.com>` | 6 | ⬜ |
+| `PAYMENT_PROVIDER` | `auto` (default), or force `paymob` / `kashier` | 6 | ⬜ |
+| `API_BASE_URL` | This API's public URL (for Kashier serverWebhook), e.g. `https://nilework-api.fly.dev` | 6 | ⬜ |
 | `PAYMOB_API_KEY` | Paymob dashboard → Settings → Account Info (use **test** keys first) | 6 | ⬜† |
 | `PAYMOB_INTEGRATION_ID` | Paymob → Developers → Payment Integrations (card integration id) | 6 | ⬜† |
 | `PAYMOB_IFRAME_ID` | Paymob → Developers → iFrames | 6 | ⬜† |
 | `PAYMOB_HMAC_SECRET` | Paymob → Developers → the HMAC secret for webhook verification | 6 | ⬜† |
+| `KASHIER_MERCHANT_ID` | Kashier dashboard → your Merchant ID (MID-…) | 6 | ⬜‡ |
+| `KASHIER_API_KEY` | Kashier → API keys → payment/iframe key (signs the order hash) | 6 | ⬜‡ |
+| `KASHIER_SECRET_KEY` | Kashier → API keys → secret used to sign webhooks (falls back to API key) | 6 | ⬜ |
+| `KASHIER_MODE` | `test` or `live` | 6 | ⬜ |
 | `OTP_PROVIDER` | `log` (dev, code printed to logs) or `cequens` (live) | 6 | ⬜ |
 | `CEQUENS_API_KEY` | cequens.com dashboard → API credentials | 6 | ⬜ |
 | `CEQUENS_SENDER` | Your approved Cequens sender id / WhatsApp number | 6 | ⬜ |
@@ -36,6 +42,9 @@ Legend — **Stage:** when you first need it · **Req:** required to boot / func
 but the app does nothing useful without it — treat as required.
 † Paymob: **all four** must be present together, or checkout stays in dev simulation
 (`isPaymobConfigured`). Set the test set first, swap to live after merchant approval.
+‡ Kashier: `MERCHANT_ID` + `API_KEY` activate the adapter (`isKashierConfigured`).
+Both Paymob and Kashier can be configured at once — `PAYMENT_PROVIDER` picks which
+runs (handy for testing both sandboxes); whichever you keep, drop the other's keys.
 
 > Local dev: copy `.env.example` → `.env` and fill the same keys.
 

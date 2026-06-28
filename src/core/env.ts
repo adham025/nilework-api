@@ -28,6 +28,14 @@ const EnvSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().default("Nilework <noreply@nilework.com>"),
 
+  // Which gateway to use when more than one is configured. "auto" prefers Paymob,
+  // then Kashier, else dev simulation. Set explicitly to test one in particular.
+  PAYMENT_PROVIDER: z.enum(["auto", "paymob", "kashier"]).default("auto"),
+
+  // Public URL of THIS API, used to build absolute provider webhook URLs (e.g.
+  // Kashier serverWebhook). Optional; gateways can use a dashboard webhook instead.
+  API_BASE_URL: z.string().url().optional(),
+
   // Paymob (Egypt payments, MASTER_PLAN §6). All optional: when unset, order
   // checkout runs in dev "simulation" mode and funds escrow directly, so the loop
   // is testable locally without gateway keys. Production sets all four.
@@ -35,6 +43,14 @@ const EnvSchema = z.object({
   PAYMOB_INTEGRATION_ID: z.coerce.number().int().positive().optional(),
   PAYMOB_IFRAME_ID: z.string().optional(),
   PAYMOB_HMAC_SECRET: z.string().optional(),
+
+  // Kashier (Egypt payments) — alternative to Paymob. KASHIER_API_KEY signs the
+  // hosted-page order hash; KASHIER_SECRET_KEY signs webhooks (falls back to the
+  // API key if unset). Unset = adapter inactive.
+  KASHIER_MERCHANT_ID: z.string().optional(),
+  KASHIER_API_KEY: z.string().optional(),
+  KASHIER_SECRET_KEY: z.string().optional(),
+  KASHIER_MODE: z.enum(["test", "live"]).default("test"),
 
   // Phone OTP CPaaS (WhatsApp-first, SMS fallback — MASTER_PLAN §6). When unset,
   // OTP runs in "log" mode (code printed to the server log) so the flow is testable
@@ -70,3 +86,19 @@ export const corsOrigins = env.CORS_ORIGINS.split(",").map((o) => o.trim());
 export const isPaymobConfigured = Boolean(
   env.PAYMOB_API_KEY && env.PAYMOB_INTEGRATION_ID && env.PAYMOB_IFRAME_ID && env.PAYMOB_HMAC_SECRET,
 );
+
+/** True when the minimum Kashier credentials are present. */
+export const isKashierConfigured = Boolean(env.KASHIER_MERCHANT_ID && env.KASHIER_API_KEY);
+
+/**
+ * Resolve which gateway checkout should use. Honours an explicit PAYMENT_PROVIDER
+ * (falling back to simulation if that provider isn't configured); otherwise prefers
+ * Paymob, then Kashier, then dev simulation.
+ */
+export function activePaymentProvider(): "paymob" | "kashier" | "simulated" {
+  if (env.PAYMENT_PROVIDER === "paymob") return isPaymobConfigured ? "paymob" : "simulated";
+  if (env.PAYMENT_PROVIDER === "kashier") return isKashierConfigured ? "kashier" : "simulated";
+  if (isPaymobConfigured) return "paymob";
+  if (isKashierConfigured) return "kashier";
+  return "simulated";
+}

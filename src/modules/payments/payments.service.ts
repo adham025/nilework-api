@@ -1,9 +1,11 @@
 import { getDb } from "@/core/db";
-import { env, isPaymobConfigured } from "@/core/env";
+import { activePaymentProvider, env, isKashierConfigured, isPaymobConfigured } from "@/core/env";
 import { estimateMinor, getLatestRate } from "@/modules/fx/fx.service";
 import { OrderError, fundEscrow } from "@/modules/orders/orders.service";
 import { getProfile } from "@/modules/profiles/profiles.service";
 import type { CheckoutResponse } from "@nilework/schemas";
+import { kashierAmountMajor, kashierCheckoutUrl } from "./kashier.client";
+import { verifyKashierSignature } from "./kashier.hmac";
 import {
   type PaymobBilling,
   authenticate,
@@ -75,8 +77,9 @@ export async function initiateCheckout(
   if (!fx) throw new OrderError("conflict", "No FX rate available to charge in EGP");
   const amountEgpMinor = egpChargeMinor(order.gross_usd_minor, fx.rate);
   const merchantRef = `${orderId}-${Date.now().toString(36)}`;
+  const provider = activePaymentProvider();
 
-  if (!isPaymobConfigured) {
+  if (provider === "simulated") {
     await sql`
       insert into public.payments
         (order_id, provider, merchant_ref, amount_usd_minor, amount_egp_minor, fx_rate_id, status)
@@ -86,6 +89,25 @@ export async function initiateCheckout(
     `;
     await fundEscrow(orderId, { id: clientId, role: "client" });
     return { provider: "simulated", redirect_url: null };
+  }
+
+  if (provider === "kashier") {
+    await sql`
+      insert into public.payments
+        (order_id, provider, merchant_ref, amount_usd_minor, amount_egp_minor, fx_rate_id, status)
+      values
+        (${orderId}, 'kashier', ${merchantRef}, ${order.gross_usd_minor},
+         ${amountEgpMinor}, ${fx.id}, 'initiated')
+    `;
+    const redirectUrl = kashierCheckoutUrl({
+      orderId: merchantRef,
+      amountMajor: kashierAmountMajor(amountEgpMinor),
+      redirectUrl: `${env.WEB_BASE_URL}/dashboard/orders/${orderId}`,
+      ...(env.API_BASE_URL
+        ? { webhookUrl: `${env.API_BASE_URL}/v1/payments/kashier/webhook` }
+        : {}),
+    });
+    return { provider: "kashier", redirect_url: redirectUrl };
   }
 
   await sql`
@@ -162,6 +184,68 @@ export async function handlePaymobWebhook(
     await fundEscrow(payment.order_id, { id: null, role: "system" });
   } catch (err) {
     // Already funded (e.g. a retried callback) — payment is recorded paid, that's fine.
+    if (!(err instanceof OrderError && err.code === "conflict")) throw err;
+  }
+  return { handled: true };
+}
+
+type KashierCallback = Record<string, unknown> & {
+  merchantOrderId?: unknown;
+  orderId?: unknown;
+  transactionId?: unknown;
+  paymentStatus?: unknown;
+  status?: unknown;
+};
+
+/**
+ * Handle a Kashier payment callback. Verifies the signature, then — if the payment
+ * succeeded and hasn't been applied — marks the payment paid and funds escrow. The
+ * order is matched by our own merchantOrderId (the merchant_ref we sent). Idempotent
+ * the same way the Paymob webhook is (Kashier retries).
+ */
+export async function handleKashierWebhook(
+  body: Record<string, unknown>,
+): Promise<{ handled: boolean }> {
+  if (!isKashierConfigured) {
+    throw new PaymentError("bad_request", "Kashier is not configured");
+  }
+  // Kashier nests the signed fields under `data`; tolerate a flat body too.
+  const data = (body.data && typeof body.data === "object" ? body.data : body) as KashierCallback;
+  const secret = env.KASHIER_SECRET_KEY || env.KASHIER_API_KEY || "";
+  if (!verifyKashierSignature(data, secret)) {
+    throw new PaymentError("unauthorized", "Invalid signature");
+  }
+
+  const merchantRef = data.merchantOrderId === undefined ? "" : String(data.merchantOrderId);
+  if (!merchantRef) throw new PaymentError("bad_request", "Missing merchantOrderId");
+  const txnId = data.transactionId === undefined ? null : String(data.transactionId);
+  const providerOrderId = data.orderId === undefined ? null : String(data.orderId);
+  const rawStatus = String(data.paymentStatus ?? data.status ?? "").toUpperCase();
+  const success = rawStatus === "SUCCESS";
+
+  const sql = getDb();
+  const rows = await sql<{ id: string; order_id: string; status: string }[]>`
+    select id, order_id, status from public.payments where merchant_ref = ${merchantRef} limit 1
+  `;
+  const payment = rows[0];
+  if (!payment) return { handled: false };
+  if (payment.status === "paid") return { handled: true };
+
+  if (!success) {
+    await sql`
+      update public.payments set status = 'failed', provider_txn_id = ${txnId} where id = ${payment.id}
+    `;
+    return { handled: true };
+  }
+
+  await sql`
+    update public.payments
+    set status = 'paid', provider_txn_id = ${txnId}, provider_order_id = ${providerOrderId}
+    where id = ${payment.id}
+  `;
+  try {
+    await fundEscrow(payment.order_id, { id: null, role: "system" });
+  } catch (err) {
     if (!(err instanceof OrderError && err.code === "conflict")) throw err;
   }
   return { handled: true };
