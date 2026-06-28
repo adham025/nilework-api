@@ -36,13 +36,19 @@ settle-holds + fx-refresh). Health check: `GET /v1/health`. API docs: `/docs`.
 | Secret(s) | Enables |
 |---|---|
 | `PAYMOB_API_KEY`, `PAYMOB_INTEGRATION_ID`, `PAYMOB_IFRAME_ID`, `PAYMOB_HMAC_SECRET` | Real Paymob checkout + the verified webhook (else checkout simulates funding) |
+| `KASHIER_MERCHANT_ID`, `KASHIER_API_KEY` (+ `KASHIER_SECRET_KEY`, `KASHIER_MODE`) | Real Kashier checkout + the verified webhook |
 | `RESEND_API_KEY` (+ `RESEND_FROM`) | Email notifications (else in-app only) |
 | `OTP_PROVIDER=cequens`, `CEQUENS_API_KEY`, `CEQUENS_SENDER` | Real WhatsApp/SMS OTP (else the code is logged) |
 | `FX_API_URL` (+ `FX_API_KEY`) | Live USD→EGP feed (else the seeded placeholder rate) |
 | `SENTRY_DSN` | Error tracking |
 
-Register the Paymob **webhook** at `https://<api-host>/v1/payments/paymob/webhook`
-(Paymob appends `?hmac=`).
+**Choosing the gateway:** `PAYMENT_PROVIDER` = `auto` (default; prefers Paymob, then
+Kashier, else simulation), or force `paymob` / `kashier` to test one sandbox at a
+time. Both can be configured at once. Webhook URLs to register:
+- Paymob: `https://<api-host>/v1/payments/paymob/webhook` (Paymob appends `?hmac=`).
+- Kashier: `https://<api-host>/v1/payments/kashier/webhook` (also set `API_BASE_URL`
+  so checkout can pass `serverWebhook`, or configure the webhook in Kashier's
+  dashboard).
 
 ## 3. Seed a staff user (admin console access)
 
