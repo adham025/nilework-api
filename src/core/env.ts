@@ -28,9 +28,10 @@ const EnvSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().default("Nilework <noreply@nilework.com>"),
 
-  // Which gateway to use when more than one is configured. "auto" prefers Paymob,
-  // then Kashier, else dev simulation. Set explicitly to test one in particular.
-  PAYMENT_PROVIDER: z.enum(["auto", "paymob", "kashier"]).default("auto"),
+  // Which gateway to use. "auto" prefers Paymob, then Kashier, else dev simulation.
+  // "simulated" forces dev simulation (funds escrow directly) even when a gateway is
+  // configured — handy for testing the full order loop locally without a webhook.
+  PAYMENT_PROVIDER: z.enum(["auto", "paymob", "kashier", "simulated"]).default("auto"),
 
   // Public URL of THIS API, used to build absolute provider webhook URLs (e.g.
   // Kashier serverWebhook). Optional; gateways can use a dashboard webhook instead.
@@ -96,6 +97,7 @@ export const isKashierConfigured = Boolean(env.KASHIER_MERCHANT_ID && env.KASHIE
  * Paymob, then Kashier, then dev simulation.
  */
 export function activePaymentProvider(): "paymob" | "kashier" | "simulated" {
+  if (env.PAYMENT_PROVIDER === "simulated") return "simulated";
   if (env.PAYMENT_PROVIDER === "paymob") return isPaymobConfigured ? "paymob" : "simulated";
   if (env.PAYMENT_PROVIDER === "kashier") return isKashierConfigured ? "kashier" : "simulated";
   if (isPaymobConfigured) return "paymob";

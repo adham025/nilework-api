@@ -60,12 +60,14 @@ describe("kashier webhook route", () => {
     await app.close();
   });
 
-  it("returns 400 when Kashier is not configured", async () => {
+  it("rejects an unsigned webhook (400 unconfigured, or 401 bad signature)", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/payments/kashier/webhook",
       payload: { data: { merchantOrderId: "x" } },
     });
-    expect(res.statusCode).toBe(400);
+    // 400 when Kashier isn't configured (CI), 401 when it is but the signature is
+    // missing/invalid (local with real keys). Either way the webhook is rejected.
+    expect([400, 401]).toContain(res.statusCode);
   });
 });
