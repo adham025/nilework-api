@@ -25,7 +25,12 @@ import {
   verifyPhone,
 } from "./identity.service";
 
-const STATUS_BY_CODE = { not_found: 404, conflict: 409, too_many: 429 } as const;
+const STATUS_BY_CODE = {
+  not_found: 404,
+  conflict: 409,
+  too_many: 429,
+  invalid_national_id: 400,
+} as const;
 
 async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
   try {

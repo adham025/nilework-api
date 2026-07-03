@@ -4,12 +4,13 @@ import { supabaseAdmin } from "@/core/supabase";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import type { IdVerification, IdentitySubmitInput, VerificationStatus } from "@nilework/schemas";
+import { parseEgyptianNationalId } from "./egyptian-id";
 import { isOtpDevMode, sendOtp } from "./otp";
 
 /** Typed error so routes can map identity failures to HTTP codes. */
 export class IdentityError extends Error {
   constructor(
-    public code: "not_found" | "conflict" | "too_many",
+    public code: "not_found" | "conflict" | "too_many" | "invalid_national_id",
     message: string,
   ) {
     super(message);
@@ -87,6 +88,19 @@ export async function submitIdentity(
   await ensureProfile(profileId);
   const sql = getDb();
 
+  // Structural validation of the Egyptian national ID (onboarding task 1.3 /
+  // identity Req 3): reject malformed numbers at submission so typos never
+  // burn a slot in the 48h human review queue. The parser never auto-approves —
+  // a structurally valid ID still goes to manual review. Arabic-Indic digits
+  // are normalized so the stored value is always the Western-digit form.
+  const parsed = parseEgyptianNationalId(input.national_id_number);
+  if (!parsed.valid) {
+    throw new IdentityError(
+      "invalid_national_id",
+      `National ID failed structural validation (${parsed.reason})`,
+    );
+  }
+
   const prof = await sql<{ id_verification_status: string }[]>`
     select id_verification_status from public.profiles where id = ${profileId}
   `;
@@ -102,7 +116,7 @@ export async function submitIdentity(
       insert into public.id_verifications
         (profile_id, full_name, national_id_number, front_path, back_path)
       values
-        (${profileId}, ${input.full_name}, ${input.national_id_number},
+        (${profileId}, ${input.full_name}, ${parsed.normalized},
          ${input.front_path}, ${input.back_path ?? null})
       returning ${tx.unsafe(ID_COLUMNS)}
     `;
