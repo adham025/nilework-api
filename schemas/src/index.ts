@@ -28,6 +28,7 @@ export * from "./payment.js";
 export * from "./payout.js";
 export * from "./plan.js";
 export * from "./profile.js";
+export * from "./project.js";
 export * from "./promo.js";
 export * from "./redemption.js";
 export * from "./review.js";
