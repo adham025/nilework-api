@@ -35,3 +35,25 @@ export const DisputeResolveSchema = z.object({
   note: z.string().min(1).max(2000),
 });
 export type DisputeResolveInput = z.infer<typeof DisputeResolveSchema>;
+
+// --- dispute thread (Phase 2: transparent dispute center) --------------------
+
+export const DisputeMessageSchema = z.object({
+  id: z.string().uuid(),
+  dispute_id: z.string().uuid(),
+  author_id: z.string().uuid(),
+  author_role: z.enum(["client", "freelancer", "staff"]),
+  body: z.string(),
+  attachment_path: z.string().nullable(),
+  created_at: z.string(),
+});
+export type DisputeMessage = z.infer<typeof DisputeMessageSchema>;
+
+export const DisputeMessageListSchema = z.array(DisputeMessageSchema);
+
+/** Post a statement (optionally with an evidence attachment) to a dispute. */
+export const DisputeMessageCreateSchema = z.object({
+  body: z.string().min(1).max(3000),
+  attachment_path: z.string().min(1).max(300).optional(),
+});
+export type DisputeMessageCreateInput = z.infer<typeof DisputeMessageCreateSchema>;

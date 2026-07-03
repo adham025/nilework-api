@@ -1,7 +1,7 @@
 import { getDb } from "@/core/db";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
-import type { Dispute, DisputeResolution } from "@nilework/schemas";
+import type { Dispute, DisputeMessage, DisputeResolution } from "@nilework/schemas";
 import type { TransactionSql } from "postgres";
 
 /** Typed error so routes can map dispute failures to HTTP codes. */
@@ -170,12 +170,15 @@ export async function resolveDispute(
         tx,
       );
       await tx`update public.orders set status = 'released', released_at = now() where id = ${dispute.order_id}`;
+      // actor_id null: order_events.actor_id FKs to profiles, and staff ids
+      // live in the isolated staff_users table (§6.2). The resolving staff
+      // member is durably recorded on disputes.resolved_by and in audit_log.
       await recordOrderEvent(
         tx,
         dispute.order_id,
         "disputed",
         "released",
-        staffId,
+        null,
         "system",
         "Dispute resolved: released",
       );
@@ -199,7 +202,7 @@ export async function resolveDispute(
         dispute.order_id,
         "disputed",
         "refunded",
-        staffId,
+        null,
         "system",
         "Dispute resolved: refunded",
       );
@@ -219,4 +222,132 @@ export async function resolveDispute(
   await notify(result.clientId, "dispute_resolved", { order_id: result.dispute.order_id });
   await notify(result.freelancerId, "dispute_resolved", { order_id: result.dispute.order_id });
   return result.dispute;
+}
+
+// --- dispute thread (Phase 2: transparent dispute center) --------------------
+
+const MESSAGE_COLUMNS = `
+  id, dispute_id, author_id, author_role, body, attachment_path, created_at
+`;
+
+/** The dispute + its order's parties, or throw. */
+async function disputeParties(disputeId: string): Promise<{
+  dispute_id: string;
+  order_id: string;
+  status: string;
+  client_id: string;
+  freelancer_id: string;
+}> {
+  const sql = getDb();
+  const rows = await sql<
+    {
+      dispute_id: string;
+      order_id: string;
+      status: string;
+      client_id: string;
+      freelancer_id: string;
+    }[]
+  >`
+    select d.id as dispute_id, d.order_id, d.status, o.client_id, o.freelancer_id
+    from public.disputes d
+    join public.orders o on o.id = d.order_id
+    where d.id = ${disputeId}
+  `;
+  if (!rows[0]) throw new DisputeError("not_found", "Dispute not found");
+  return rows[0];
+}
+
+/**
+ * A party (client/freelancer) posts a statement — optionally with evidence —
+ * to an OPEN dispute. The counterparty is notified so both sides always see
+ * the same record. Append-only; resolution closes the thread.
+ */
+export async function postDisputeMessage(
+  disputeId: string,
+  authorId: string,
+  input: { body: string; attachment_path?: string | undefined },
+): Promise<DisputeMessage> {
+  const parties = await disputeParties(disputeId);
+  const role =
+    parties.client_id === authorId
+      ? "client"
+      : parties.freelancer_id === authorId
+        ? "freelancer"
+        : null;
+  if (!role) throw new DisputeError("forbidden", "Not a party to this dispute");
+  if (parties.status !== "open") {
+    throw new DisputeError("conflict", "Dispute is resolved; the thread is closed");
+  }
+
+  const sql = getDb();
+  const rows = await sql<DisputeMessage[]>`
+    insert into public.dispute_messages (dispute_id, author_id, author_role, body, attachment_path)
+    values (${disputeId}, ${authorId}, ${role}, ${input.body}, ${input.attachment_path ?? null})
+    returning ${sql.unsafe(MESSAGE_COLUMNS)}
+  `;
+
+  const counterparty = role === "client" ? parties.freelancer_id : parties.client_id;
+  await notify(counterparty, "dispute_message", {
+    order_id: parties.order_id,
+    dispute_id: disputeId,
+  });
+  // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
+  return rows[0]!;
+}
+
+/** Staff posts into the thread (visible to both parties — transparency). */
+export async function postStaffDisputeMessage(
+  disputeId: string,
+  staffUserId: string,
+  input: { body: string },
+): Promise<DisputeMessage> {
+  const parties = await disputeParties(disputeId);
+  if (parties.status !== "open") {
+    throw new DisputeError("conflict", "Dispute is resolved; the thread is closed");
+  }
+
+  const sql = getDb();
+  const rows = await sql<DisputeMessage[]>`
+    insert into public.dispute_messages (dispute_id, author_id, author_role, body)
+    values (${disputeId}, ${staffUserId}, 'staff', ${input.body})
+    returning ${sql.unsafe(MESSAGE_COLUMNS)}
+  `;
+  await notify(parties.client_id, "dispute_message", {
+    order_id: parties.order_id,
+    dispute_id: disputeId,
+  });
+  await notify(parties.freelancer_id, "dispute_message", {
+    order_id: parties.order_id,
+    dispute_id: disputeId,
+  });
+  // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
+  return rows[0]!;
+}
+
+/** The full thread, oldest first. Parties only (staff uses listDisputeThreadStaff). */
+export async function listDisputeMessages(
+  disputeId: string,
+  viewerId: string,
+): Promise<DisputeMessage[]> {
+  const parties = await disputeParties(disputeId);
+  if (parties.client_id !== viewerId && parties.freelancer_id !== viewerId) {
+    throw new DisputeError("forbidden", "Not a party to this dispute");
+  }
+  const sql = getDb();
+  return sql<DisputeMessage[]>`
+    select ${sql.unsafe(MESSAGE_COLUMNS)} from public.dispute_messages
+    where dispute_id = ${disputeId}
+    order by created_at asc
+  `;
+}
+
+/** Staff view of the thread (no party check). */
+export async function listDisputeThreadStaff(disputeId: string): Promise<DisputeMessage[]> {
+  await disputeParties(disputeId);
+  const sql = getDb();
+  return sql<DisputeMessage[]>`
+    select ${sql.unsafe(MESSAGE_COLUMNS)} from public.dispute_messages
+    where dispute_id = ${disputeId}
+    order by created_at asc
+  `;
 }
