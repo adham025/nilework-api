@@ -55,3 +55,61 @@ export function kashierCheckoutUrl(params: {
   if (params.webhookUrl) q.set("serverWebhook", params.webhookUrl);
   return `${HPP_BASE}?${q.toString()}`;
 }
+
+/** Kashier management API base — mode-aware (test vs live). */
+function kashierApiBase(): string {
+  return env.KASHIER_MODE === "live" ? "https://api.kashier.io" : "https://test-api.kashier.io";
+}
+
+export interface KashierRefundResult {
+  ok: boolean;
+  status: number;
+  /** Kashier's transaction/refund reference when available. */
+  reference: string | null;
+  body: unknown;
+}
+
+/**
+ * Refund a captured Kashier payment (payment-integration-phase1 Req 8).
+ * Calls Kashier's order-operation endpoint with the secret key; amount is in
+ * EGP major units. Isolated here so the exact endpoint/payload shape — the one
+ * remaining Kashier contract to confirm against their sandbox docs — is a
+ * single-function change if it shifts.
+ */
+export async function kashierRefund(
+  providerOrderId: string,
+  amountEgpMinor: number,
+  reason = "nilework_admin_refund",
+): Promise<KashierRefundResult> {
+  const secret = env.KASHIER_SECRET_KEY || env.KASHIER_API_KEY || "";
+  const res = await fetch(`${kashierApiBase()}/orders/${encodeURIComponent(providerOrderId)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: secret,
+    },
+    body: JSON.stringify({
+      apiOperation: "REFUND",
+      reason,
+      transaction: { amount: kashierAmountMajor(amountEgpMinor) },
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON error body; keep null.
+  }
+  const record = (body ?? {}) as Record<string, unknown>;
+  const response = (record.response ?? {}) as Record<string, unknown>;
+  const reference =
+    typeof response.transactionId === "string"
+      ? response.transactionId
+      : typeof record.transactionId === "string"
+        ? record.transactionId
+        : null;
+
+  return { ok: res.ok, status: res.status, reference, body };
+}

@@ -1,4 +1,4 @@
-import { requireAuth } from "@/core/auth";
+import { requireAuth, requireStaff } from "@/core/auth";
 import { OrderError } from "@/modules/orders/orders.service";
 import { ApiErrorSchema, CheckoutResponseSchema } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
@@ -9,6 +9,8 @@ import {
   handleKashierWebhook,
   handlePaymobWebhook,
   initiateCheckout,
+  recordWebhook,
+  refundPayment,
 } from "./payments.service";
 
 const ORDER_STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
@@ -99,9 +101,67 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req, reply) => {
+      const data = (
+        req.body.data && typeof req.body.data === "object" ? req.body.data : req.body
+      ) as Record<string, unknown>;
+      const signature = typeof data.signature === "string" ? data.signature : null;
       try {
         await handleKashierWebhook(req.body);
+        await recordWebhook({
+          provider: "kashier",
+          paymentId: null,
+          payload: req.body,
+          signature,
+          verified: true,
+          processed: true,
+        });
         return { received: true };
+      } catch (err) {
+        if (err instanceof PaymentError) {
+          await recordWebhook({
+            provider: "kashier",
+            paymentId: null,
+            payload: req.body,
+            signature,
+            verified: err.code !== "unauthorized",
+            processed: false,
+            error: err.message,
+          });
+          return reply
+            .code(PAYMENT_STATUS_BY_CODE[err.code])
+            .send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // Staff refund: returns the client's money at the provider (Kashier launch
+  // gateway; 'simulated' refunds locally for dev). Idempotent.
+  r.post(
+    "/admin/payments/:orderId/refund",
+    {
+      preHandler: requireStaff,
+      schema: {
+        tags: ["payments"],
+        summary: "Refund the captured payment on an order (staff only, idempotent)",
+        params: z.object({ orderId: z.string().uuid() }),
+        response: {
+          200: z.object({
+            payment_id: z.string().uuid(),
+            order_id: z.string().uuid(),
+            status: z.literal("refunded"),
+            refund_ref: z.string().nullable(),
+          }),
+          400: ApiErrorSchema,
+          401: ApiErrorSchema,
+          404: ApiErrorSchema,
+        },
+      },
+    },
+    async (req, reply) => {
+      try {
+        return await refundPayment(req.params.orderId);
       } catch (err) {
         if (err instanceof PaymentError) {
           return reply

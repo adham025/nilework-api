@@ -4,7 +4,7 @@ import { estimateMinor, getLatestRate } from "@/modules/fx/fx.service";
 import { OrderError, fundEscrow } from "@/modules/orders/orders.service";
 import { getProfile } from "@/modules/profiles/profiles.service";
 import type { CheckoutResponse } from "@nilework/schemas";
-import { kashierAmountMajor, kashierCheckoutUrl } from "./kashier.client";
+import { kashierAmountMajor, kashierCheckoutUrl, kashierRefund } from "./kashier.client";
 import { verifyKashierSignature } from "./kashier.hmac";
 import {
   type PaymobBilling,
@@ -249,4 +249,114 @@ export async function handleKashierWebhook(
     if (!(err instanceof OrderError && err.code === "conflict")) throw err;
   }
   return { handled: true };
+}
+
+// --- refunds + webhook audit (Kashier-primary hardening, spec phase1) ---------
+
+/**
+ * Persist a provider callback for audit/replay (Req 4.1/14). Never blocks the
+ * money path: an audit-table hiccup must not stop escrow funding, so failures
+ * are swallowed after a console error.
+ */
+export async function recordWebhook(entry: {
+  provider: "paymob" | "kashier" | "simulated";
+  paymentId: string | null;
+  payload: unknown;
+  signature: string | null;
+  verified: boolean;
+  processed: boolean;
+  error?: string | null;
+}): Promise<void> {
+  try {
+    const sql = getDb();
+    await sql`
+      insert into public.payment_webhooks
+        (provider, payment_id, payload, signature, verified, processed, processing_error, processed_at)
+      values
+        (${entry.provider}, ${entry.paymentId}, ${sql.json(entry.payload as never)},
+         ${entry.signature}, ${entry.verified}, ${entry.processed},
+         ${entry.error ?? null}, ${entry.processed ? new Date() : null})
+    `;
+  } catch (err) {
+    console.error("payment_webhooks audit insert failed", err);
+  }
+}
+
+export interface RefundResult {
+  payment_id: string;
+  order_id: string;
+  status: "refunded";
+  refund_ref: string | null;
+}
+
+/**
+ * Refund the captured payment on an order (staff-only; Req 8). Kashier is the
+ * launch gateway: the refund goes to Kashier's order-operation API using the
+ * provider_order_id captured by the webhook. The 'simulated' provider refunds
+ * locally so the loop is testable without keys. Idempotent: an already-refunded
+ * payment returns as-is. This returns the client's money at the provider; the
+ * internal escrow reversal stays with dispute resolution (one ledger authority).
+ */
+export async function refundPayment(orderId: string): Promise<RefundResult> {
+  const sql = getDb();
+  const rows = await sql<
+    {
+      id: string;
+      order_id: string;
+      provider: string;
+      status: string;
+      amount_egp_minor: number;
+      provider_order_id: string | null;
+      refund_ref: string | null;
+    }[]
+  >`
+    select id, order_id, provider, status, amount_egp_minor, provider_order_id, refund_ref
+    from public.payments
+    where order_id = ${orderId} and status in ('paid', 'refunded')
+    order by created_at desc
+    limit 1
+  `;
+  const payment = rows[0];
+  if (!payment) throw new PaymentError("not_found", "No captured payment on this order");
+  if (payment.status === "refunded") {
+    return {
+      payment_id: payment.id,
+      order_id: payment.order_id,
+      status: "refunded",
+      refund_ref: payment.refund_ref,
+    };
+  }
+
+  let refundRef: string | null = null;
+  if (payment.provider === "kashier") {
+    if (!payment.provider_order_id) {
+      throw new PaymentError("bad_request", "Payment has no Kashier order reference");
+    }
+    const result = await kashierRefund(payment.provider_order_id, payment.amount_egp_minor);
+    if (!result.ok) {
+      throw new PaymentError(
+        "bad_request",
+        `Kashier refund failed (HTTP ${result.status}) — check the Kashier dashboard`,
+      );
+    }
+    refundRef = result.reference;
+  } else if (payment.provider !== "simulated") {
+    // Paymob refunds are dormant until Paymob is (re)activated as a gateway.
+    throw new PaymentError(
+      "bad_request",
+      `Refunds not implemented for provider ${payment.provider}`,
+    );
+  }
+
+  await sql`
+    update public.payments
+    set status = 'refunded', refunded_at = now(), refund_ref = ${refundRef}
+    where id = ${payment.id}
+  `;
+  return {
+    payment_id: payment.id,
+    order_id: payment.order_id,
+    status: "refunded",
+    refund_ref: refundRef,
+  };
 }
