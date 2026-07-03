@@ -171,8 +171,10 @@ export async function submitProposal(
   const sql = getDb();
 
   const created = await sql.begin(async (tx) => {
-    const projects = await tx<{ client_id: string; status: string }[]>`
-      select client_id, status from public.projects where id = ${projectId} for update
+    const projects = await tx<
+      { client_id: string; status: string; budget_min_usd_minor: number }[]
+    >`
+      select client_id, status, budget_min_usd_minor from public.projects where id = ${projectId} for update
     `;
     const project = projects[0];
     if (!project) throw new ProjectError("not_found", "Project not found");
@@ -181,6 +183,12 @@ export async function submitProposal(
     }
     if (project.status !== "open") {
       throw new ProjectError("conflict", `Project is ${project.status}, not accepting proposals`);
+    }
+    if (isLowballBid(input.price_usd_minor, Number(project.budget_min_usd_minor))) {
+      throw new ProjectError(
+        "invalid",
+        "Bid is below half the project minimum budget (anti-lowball guardrail)",
+      );
     }
 
     const existing = await tx<{ id: string; status: string }[]>`
@@ -409,4 +417,14 @@ export async function acceptProposal(
     });
   }
   return { proposal: result.proposal, orderId: result.orderId };
+}
+
+/**
+ * Anti-lowball guardrail (Phase 2: Trust & Quality). A bid below half the
+ * client's own stated MINIMUM budget is treated as predatory race-to-the-
+ * bottom pricing and rejected server-side; the web form warns softly below
+ * the minimum itself. Pure predicate, exported for property/unit tests.
+ */
+export function isLowballBid(priceUsdMinor: number, budgetMinUsdMinor: number): boolean {
+  return priceUsdMinor < Math.ceil(budgetMinUsdMinor / 2);
 }

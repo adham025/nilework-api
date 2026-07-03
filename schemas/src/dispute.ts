@@ -16,6 +16,8 @@ export const DisputeSchema = z.object({
   resolution: DisputeResolutionSchema.nullable(),
   resolution_note: z.string().nullable(),
   resolved_at: z.string().nullable(),
+  // Published resolution SLA (Phase 2): the same clock both parties and staff see.
+  resolve_due_at: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
 });

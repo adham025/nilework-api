@@ -23,6 +23,7 @@ import {
   postDisputeMessage,
   postStaffDisputeMessage,
   resolveDispute,
+  signEvidenceUrl,
 } from "./disputes.service";
 
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
@@ -140,7 +141,57 @@ export async function disputeRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  r.get(
+    "/disputes/:id/messages/:messageId/attachment",
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["disputes"],
+        summary: "Short-lived signed URL for a statement's evidence (party only)",
+        params: z.object({ id: z.string().uuid(), messageId: z.string().uuid() }),
+        response: {
+          200: z.object({ url: z.string() }),
+          401: ApiErrorSchema,
+          403: ApiErrorSchema,
+          404: ApiErrorSchema,
+        },
+      },
+    },
+    async (req, reply) => {
+      // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
+      const userId = req.authUser!.id;
+      const url = await run(reply, () =>
+        signEvidenceUrl(req.params.id, req.params.messageId, userId, false),
+      );
+      if (url) return { url };
+    },
+  );
+
   // --- staff ---------------------------------------------------------------
+
+  r.get(
+    "/admin/disputes/:id/messages/:messageId/attachment",
+    {
+      preHandler: requireStaff,
+      schema: {
+        tags: ["admin"],
+        summary: "Short-lived signed URL for a statement's evidence (staff)",
+        params: z.object({ id: z.string().uuid(), messageId: z.string().uuid() }),
+        response: {
+          200: z.object({ url: z.string() }),
+          401: ApiErrorSchema,
+          403: ApiErrorSchema,
+          404: ApiErrorSchema,
+        },
+      },
+    },
+    async (req, reply) => {
+      const url = await run(reply, () =>
+        signEvidenceUrl(req.params.id, req.params.messageId, null, true),
+      );
+      if (url) return { url };
+    },
+  );
 
   r.get(
     "/admin/disputes/:id/messages",

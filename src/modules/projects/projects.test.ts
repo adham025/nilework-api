@@ -1,7 +1,9 @@
 import { buildApp } from "@/app";
 import { ProjectCreateSchema, ProposalCreateSchema } from "@nilework/schemas";
+import fc from "fast-check";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { isLowballBid } from "./projects.service";
 
 describe("ProjectCreateSchema", () => {
   const valid = {
@@ -148,5 +150,34 @@ describe("project auth guards", () => {
     const res = await app.inject({ method: "GET", url: "/v1/projects" });
     // 200 with DB, 500 without — never an auth rejection.
     expect([200, 500]).toContain(res.statusCode);
+  });
+});
+
+describe("isLowballBid — anti-lowball guardrail (Phase 2)", () => {
+  it("property: bids at or above half the minimum budget always pass", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 500, max: 100_000_000 }), (budgetMin) => {
+        const floor = Math.ceil(budgetMin / 2);
+        expect(isLowballBid(floor, budgetMin)).toBe(false);
+        expect(isLowballBid(budgetMin, budgetMin)).toBe(false);
+        expect(isLowballBid(budgetMin * 2, budgetMin)).toBe(false);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+  it("property: bids below half the minimum budget are always flagged", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 502, max: 100_000_000 }), (budgetMin) => {
+        const floor = Math.ceil(budgetMin / 2);
+        expect(isLowballBid(floor - 1, budgetMin)).toBe(true);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+  it("examples: $100 budget → $50 ok, $49.99 flagged", () => {
+    expect(isLowballBid(5000, 10000)).toBe(false);
+    expect(isLowballBid(4999, 10000)).toBe(true);
   });
 });

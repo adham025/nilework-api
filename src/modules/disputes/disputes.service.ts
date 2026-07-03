@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { supabaseAdmin } from "@/core/supabase";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
 import type { Dispute, DisputeMessage, DisputeResolution } from "@nilework/schemas";
@@ -17,7 +18,7 @@ export class DisputeError extends Error {
 
 const DISPUTE_COLUMNS = `
   id, order_id, opened_by, opener_role, reason, status, resolution,
-  resolution_note, resolved_at, created_at, updated_at
+  resolution_note, resolved_at, resolve_due_at, created_at, updated_at
 `;
 
 interface OrderRow {
@@ -350,4 +351,35 @@ export async function listDisputeThreadStaff(disputeId: string): Promise<Dispute
     where dispute_id = ${disputeId}
     order by created_at asc
   `;
+}
+
+/**
+ * Short-lived signed URL for a statement's evidence attachment. The uploader
+ * owns the file in storage; the counterparty and staff view it only through
+ * this API check — never via direct bucket access.
+ */
+export async function signEvidenceUrl(
+  disputeId: string,
+  messageId: string,
+  viewerId: string | null,
+  isStaff: boolean,
+): Promise<string> {
+  const parties = await disputeParties(disputeId);
+  if (!isStaff && viewerId !== parties.client_id && viewerId !== parties.freelancer_id) {
+    throw new DisputeError("forbidden", "Not a party to this dispute");
+  }
+
+  const sql = getDb();
+  const rows = await sql<{ attachment_path: string | null }[]>`
+    select attachment_path from public.dispute_messages
+    where id = ${messageId} and dispute_id = ${disputeId}
+  `;
+  if (!rows[0]) throw new DisputeError("not_found", "Statement not found");
+  if (!rows[0].attachment_path) throw new DisputeError("not_found", "No evidence attached");
+
+  const { data, error } = await supabaseAdmin.storage
+    .from("dispute-evidence")
+    .createSignedUrl(rows[0].attachment_path, 300);
+  if (error || !data) throw new DisputeError("not_found", "Could not sign evidence URL");
+  return data.signedUrl;
 }
