@@ -38,6 +38,8 @@ export const IdVerificationSchema = z.object({
   review_note: z.string().nullable(),
   reviewed_at: z.string().nullable(),
   created_at: z.string(),
+  // Same national ID already approved on another account (identity Req 8).
+  flagged_duplicate: z.boolean().default(false),
 });
 export type IdVerification = z.infer<typeof IdVerificationSchema>;
 

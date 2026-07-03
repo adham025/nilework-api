@@ -1,4 +1,5 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { auditLog } from "@/modules/admin/audit.service";
 import {
   ApiErrorSchema,
   IdRejectSchema,
@@ -182,7 +183,14 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       // biome-ignore lint/style/noNonNullAssertion: requireStaff guarantees staffUser.
       const staffId = req.staffUser!.id;
-      return run(reply, () => reviewIdentity(req.params.id, staffId, true, null));
+      const result = await run(reply, () => reviewIdentity(req.params.id, staffId, true, null));
+      if (result) {
+        await auditLog(staffId, "identity_approved", "id_verification", req.params.id, {
+          profile_id: result.profile_id,
+          flagged_duplicate: result.flagged_duplicate,
+        });
+      }
+      return result;
     },
   );
 
@@ -204,8 +212,19 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    async (req, reply) =>
+    async (req, reply) => {
       // biome-ignore lint/style/noNonNullAssertion: requireStaff guarantees staffUser.
-      run(reply, () => reviewIdentity(req.params.id, req.staffUser!.id, false, req.body.note)),
+      const staffId = req.staffUser!.id;
+      const result = await run(reply, () =>
+        reviewIdentity(req.params.id, staffId, false, req.body.note),
+      );
+      if (result) {
+        await auditLog(staffId, "identity_rejected", "id_verification", req.params.id, {
+          profile_id: result.profile_id,
+          note: req.body.note,
+        });
+      }
+      return result;
+    },
   );
 }

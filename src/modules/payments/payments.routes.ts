@@ -1,4 +1,5 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { auditLog } from "@/modules/admin/audit.service";
 import { OrderError } from "@/modules/orders/orders.service";
 import { ApiErrorSchema, CheckoutResponseSchema } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
@@ -161,7 +162,13 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       try {
-        return await refundPayment(req.params.orderId);
+        const result = await refundPayment(req.params.orderId);
+        // biome-ignore lint/style/noNonNullAssertion: requireStaff guarantees staffUser.
+        await auditLog(req.staffUser!.id, "payment_refunded", "order", req.params.orderId, {
+          payment_id: result.payment_id,
+          refund_ref: result.refund_ref,
+        });
+        return result;
       } catch (err) {
         if (err instanceof PaymentError) {
           return reply

@@ -1,5 +1,6 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, createHmac, randomInt } from "node:crypto";
 import { getDb } from "@/core/db";
+import { env } from "@/core/env";
 import { supabaseAdmin } from "@/core/supabase";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
@@ -24,11 +25,22 @@ const MAX_ATTEMPTS = 5;
 
 const ID_COLUMNS = `
   id, profile_id, full_name, national_id_number, front_path, back_path,
-  status, review_note, reviewed_at, created_at
+  status, review_note, reviewed_at, created_at, flagged_duplicate
 `;
 
 function hashCode(code: string, profileId: string): string {
   return createHash("sha256").update(`${profileId}:${code}`).digest("hex");
+}
+
+/**
+ * Keyed hash of a national ID for duplicate lookup (identity Req 8): supports
+ * exact-match detection across accounts without ever comparing/exposing
+ * plaintext. HMAC key comes from ID_HASH_KEY (falls back to the service-role
+ * key so dev needs no extra config).
+ */
+export function hashNationalId(normalizedId: string): string {
+  const key = env.ID_HASH_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+  return createHmac("sha256", key).update(normalizedId).digest("hex");
 }
 
 // --- phone OTP -------------------------------------------------------------
@@ -111,13 +123,35 @@ export async function submitIdentity(
     throw new IdentityError("conflict", "A verification is already under review");
   }
 
+  // Duplicate detection (Req 8): the same national ID approved on ANOTHER
+  // account flags this submission for the reviewer. The submission still goes
+  // to the queue — approval is a human decision and the reviewer sees both
+  // sides — but it can never slip through unmarked. Hash-only lookup; the
+  // plaintext ID is never compared across accounts.
+  const idHash = hashNationalId(parsed.normalized);
+  const dupes = await sql<{ id: string }[]>`
+    select id from public.id_verifications
+    where national_id_hash = ${idHash}
+      and status = 'approved'
+      and profile_id <> ${profileId}
+    limit 1
+  `;
+  const flaggedDuplicate = dupes.length > 0;
+  if (flaggedDuplicate) {
+    console.warn(
+      `identity: national-ID hash collision — profile ${profileId} submitted an ID already approved elsewhere (flagged for review)`,
+    );
+  }
+
   return sql.begin(async (tx) => {
     const rows = await tx<IdVerification[]>`
       insert into public.id_verifications
-        (profile_id, full_name, national_id_number, front_path, back_path)
+        (profile_id, full_name, national_id_number, front_path, back_path,
+         national_id_hash, flagged_duplicate)
       values
         (${profileId}, ${input.full_name}, ${parsed.normalized},
-         ${input.front_path}, ${input.back_path ?? null})
+         ${input.front_path}, ${input.back_path ?? null},
+         ${idHash}, ${flaggedDuplicate})
       returning ${tx.unsafe(ID_COLUMNS)}
     `;
     await tx`update public.profiles set id_verification_status = 'pending' where id = ${profileId}`;

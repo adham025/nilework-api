@@ -62,6 +62,9 @@ const EnvSchema = z.object({
 
   // Live FX feed (MASTER_PLAN §6: replace the placeholder rate). Optional API key
   // for the rate source consumed by the worker's scheduled refresh.
+  // Keyed hash for national-ID duplicate lookup (identity Req 8). Falls back to
+  // the service-role key so dev works without extra config; set explicitly in prod.
+  ID_HASH_KEY: z.string().optional(),
   FX_API_URL: z.string().url().optional(),
   FX_API_KEY: z.string().optional(),
 
