@@ -22,7 +22,7 @@ import { orderRoutes } from "@/modules/orders/orders.routes";
 import { paymentRoutes } from "@/modules/payments/payments.routes";
 import { payoutRoutes } from "@/modules/payouts/payouts.routes";
 import { planRoutes } from "@/modules/plans/plans.routes";
-import { profileRoutes } from "@/modules/profiles/profiles.routes";
+import { freelancerRoutes, profileRoutes } from "@/modules/profiles/profiles.routes";
 import { projectRoutes } from "@/modules/projects/projects.routes";
 import { promoRoutes } from "@/modules/promo/promo.routes";
 import { redemptionRoutes } from "@/modules/redemptions/redemptions.routes";
@@ -72,6 +72,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Versioned API surface.
   await app.register(healthRoutes, { prefix: "/v1" });
   await app.register(profileRoutes, { prefix: "/v1" });
+  await app.register(freelancerRoutes, { prefix: "/v1" });
   await app.register(categoryRoutes, { prefix: "/v1" });
   await app.register(gigRoutes, { prefix: "/v1" });
   await app.register(projectRoutes, { prefix: "/v1" });

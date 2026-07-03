@@ -1,5 +1,5 @@
 import { getDb } from "@/core/db";
-import type { Profile, ProfileUpdate } from "@nilework/schemas";
+import type { FreelancerCard, Profile, ProfileUpdate, PublicFreelancer } from "@nilework/schemas";
 
 const COLUMNS = `
   id, display_name, locale, is_client, is_freelancer, headline, bio, country,
@@ -67,4 +67,62 @@ export async function updateProfile(userId: string, patch: ProfileUpdate): Promi
   `;
   // biome-ignore lint/style/noNonNullAssertion: update...returning yields the row.
   return rows[0]!;
+}
+
+/** Columns exposed on public freelancer surfaces — never phone/locale/flags. */
+const FREELANCER_CARD_SELECT = `
+  p.id, p.display_name, p.headline, p.country, p.avatar_url,
+  (p.id_verification_status = 'verified') as verified,
+  round(avg(r.rating)::numeric, 2)::float8 as avg_rating,
+  count(distinct r.id)::int as review_count,
+  count(distinct g.id)::int as gig_count,
+  p.created_at
+`;
+
+/**
+ * Public freelancer browse (public-browse-search-phase1): completed-onboarding
+ * freelancers with review/gig aggregates, newest first, cursor-paginated.
+ * Keyword search is ILIKE over display_name + headline (FTS upgrade tracked in
+ * the spec); verified_only filters to ID-verified freelancers.
+ */
+export async function listFreelancers(query: {
+  q?: string | undefined;
+  verified_only?: string | undefined;
+  cursor?: string | undefined;
+  limit: number;
+}): Promise<{ items: FreelancerCard[]; next_cursor: string | null }> {
+  const sql = getDb();
+  const q = query.q?.trim() ? `%${query.q.trim()}%` : null;
+
+  const rows = await sql<FreelancerCard[]>`
+    select ${sql.unsafe(FREELANCER_CARD_SELECT)}
+    from public.profiles p
+    left join public.reviews r on r.reviewee_id = p.id
+    left join public.gigs g on g.freelancer_id = p.id and g.status = 'active'
+    where p.is_freelancer = true and p.onboarding_completed = true
+      ${q ? sql`and (p.display_name ilike ${q} or p.headline ilike ${q})` : sql``}
+      ${query.verified_only === "true" ? sql`and p.id_verification_status = 'verified'` : sql``}
+      ${query.cursor ? sql`and p.created_at < ${query.cursor}` : sql``}
+    group by p.id
+    order by p.created_at desc
+    limit ${query.limit + 1}
+  `;
+
+  const items = rows.slice(0, query.limit);
+  const next = rows.length > query.limit ? (items[items.length - 1]?.created_at ?? null) : null;
+  return { items, next_cursor: next };
+}
+
+/** Public freelancer profile (card + bio). Null when not a public freelancer. */
+export async function getPublicFreelancer(id: string): Promise<PublicFreelancer | null> {
+  const sql = getDb();
+  const rows = await sql<PublicFreelancer[]>`
+    select ${sql.unsafe(FREELANCER_CARD_SELECT)}, p.bio
+    from public.profiles p
+    left join public.reviews r on r.reviewee_id = p.id
+    left join public.gigs g on g.freelancer_id = p.id and g.status = 'active'
+    where p.id = ${id} and p.is_freelancer = true and p.onboarding_completed = true
+    group by p.id
+  `;
+  return rows[0] ?? null;
 }

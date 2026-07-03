@@ -1,9 +1,22 @@
 import { requireAuth } from "@/core/auth";
 import { awardAchievement } from "@/modules/gamification/gamification.service";
-import { ApiErrorSchema, ProfileSchema, ProfileUpdateSchema } from "@nilework/schemas";
+import {
+  ApiErrorSchema,
+  FreelancerListQuerySchema,
+  FreelancerListResponseSchema,
+  ProfileSchema,
+  ProfileUpdateSchema,
+  PublicFreelancerSchema,
+} from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { ensureProfile, updateProfile } from "./profiles.service";
+import { z } from "zod";
+import {
+  ensureProfile,
+  getPublicFreelancer,
+  listFreelancers,
+  updateProfile,
+} from "./profiles.service";
 
 /** Authenticated profile endpoints — the "me" surface for onboarding + edits. */
 export async function profileRoutes(app: FastifyInstance): Promise<void> {
@@ -41,6 +54,45 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       const profile = await updateProfile(req.authUser!.id, req.body);
       // Gamification Phase-1 hook (§5.3): badge once onboarding completes.
       if (profile.onboarding_completed) await awardAchievement(profile.id, "profile_complete");
+      return profile;
+    },
+  );
+}
+
+/** Public freelancer discovery — browse + profile (public-browse-search-phase1). */
+export async function freelancerRoutes(app: FastifyInstance): Promise<void> {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.get(
+    "/freelancers",
+    {
+      schema: {
+        tags: ["marketplace"],
+        summary: "Browse freelancers (public; keyword + verified filter, cursor-paginated)",
+        querystring: FreelancerListQuerySchema,
+        response: { 200: FreelancerListResponseSchema },
+      },
+    },
+    async (req) => listFreelancers(req.query),
+  );
+
+  r.get(
+    "/freelancers/:id",
+    {
+      schema: {
+        tags: ["marketplace"],
+        summary: "Public freelancer profile",
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: PublicFreelancerSchema, 404: ApiErrorSchema },
+      },
+    },
+    async (req, reply) => {
+      const profile = await getPublicFreelancer(req.params.id);
+      if (!profile) {
+        return reply
+          .code(404)
+          .send({ error: { code: "not_found", message: "Freelancer not found" } });
+      }
       return profile;
     },
   );

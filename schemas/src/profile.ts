@@ -52,3 +52,40 @@ export const OnboardingSchema = z
     path: ["is_client"],
   });
 export type OnboardingInput = z.infer<typeof OnboardingSchema>;
+
+// --- public freelancer discovery (public-browse-search-phase1) ----------------
+
+/** Public card for freelancer browse — only safe, public fields. */
+export const FreelancerCardSchema = z.object({
+  id: z.string().uuid(),
+  display_name: z.string().nullable(),
+  headline: z.string().nullable(),
+  country: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+  verified: z.boolean(),
+  avg_rating: z.number().nullable(),
+  review_count: z.number().int().nonnegative(),
+  gig_count: z.number().int().nonnegative(),
+  created_at: z.string(),
+});
+export type FreelancerCard = z.infer<typeof FreelancerCardSchema>;
+
+export const FreelancerListResponseSchema = z.object({
+  items: z.array(FreelancerCardSchema),
+  next_cursor: z.string().nullable(),
+});
+export type FreelancerListResponse = z.infer<typeof FreelancerListResponseSchema>;
+
+export const FreelancerListQuerySchema = z.object({
+  q: z.string().max(120).optional(),
+  verified_only: z.enum(["true", "false"]).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(48).default(24),
+});
+export type FreelancerListQuery = z.infer<typeof FreelancerListQuerySchema>;
+
+/** Public profile page payload — card plus bio. */
+export const PublicFreelancerSchema = FreelancerCardSchema.extend({
+  bio: z.string().nullable(),
+});
+export type PublicFreelancer = z.infer<typeof PublicFreelancerSchema>;
