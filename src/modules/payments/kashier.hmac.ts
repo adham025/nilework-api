@@ -27,9 +27,26 @@ export function computeKashierSignature(data: Json, secret: string): string | nu
   return createHmac("sha256", secret).update(queryString).digest("hex");
 }
 
-/** Constant-time check that a Kashier callback's `signature` matches its contents. */
-export function verifyKashierSignature(data: Json, secret: string): boolean {
-  const provided = typeof data.signature === "string" ? data.signature : "";
+/**
+ * Constant-time check that a Kashier callback's signature matches its contents.
+ *
+ * Signature source (confirmed against a real sandbox webhook, TX-474571105):
+ * server webhooks carry the digest in the `x-kashier-signature` HTTP HEADER —
+ * the body has `signatureKeys` but no `signature` field. Redirect-style
+ * callbacks put it in the params. So the caller passes the header value when
+ * present; `data.signature` remains the fallback for redirect payloads.
+ */
+export function verifyKashierSignature(
+  data: Json,
+  secret: string,
+  headerSignature?: string | undefined,
+): boolean {
+  const provided =
+    headerSignature && headerSignature.length > 0
+      ? headerSignature
+      : typeof data.signature === "string"
+        ? data.signature
+        : "";
   if (!provided) return false;
   const expected = computeKashierSignature(data, secret);
   if (!expected) return false;

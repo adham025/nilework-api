@@ -105,9 +105,14 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       const data = (
         req.body.data && typeof req.body.data === "object" ? req.body.data : req.body
       ) as Record<string, unknown>;
-      const signature = typeof data.signature === "string" ? data.signature : null;
+      // Server webhooks sign via the x-kashier-signature header (confirmed on a
+      // real sandbox callback); redirect payloads carry data.signature instead.
+      const headerSig = req.headers["x-kashier-signature"];
+      const headerSignature = typeof headerSig === "string" ? headerSig : undefined;
+      const signature =
+        headerSignature ?? (typeof data.signature === "string" ? data.signature : null);
       try {
-        await handleKashierWebhook(req.body);
+        await handleKashierWebhook(req.body, headerSignature);
         await recordWebhook({
           provider: "kashier",
           paymentId: null,

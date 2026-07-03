@@ -56,11 +56,6 @@ export function kashierCheckoutUrl(params: {
   return `${HPP_BASE}?${q.toString()}`;
 }
 
-/** Kashier management API base — mode-aware (test vs live). */
-function kashierApiBase(): string {
-  return env.KASHIER_MODE === "live" ? "https://api.kashier.io" : "https://test-api.kashier.io";
-}
-
 export interface KashierRefundResult {
   ok: boolean;
   status: number;
@@ -69,12 +64,21 @@ export interface KashierRefundResult {
   body: unknown;
 }
 
+/** Kashier financial-operations host (refund/capture/void) — mode-aware. */
+function kashierFepBase(): string {
+  return env.KASHIER_MODE === "live" ? "https://fep.kashier.io" : "https://test-fep.kashier.io";
+}
+
 /**
  * Refund a captured Kashier payment (payment-integration-phase1 Req 8).
- * Calls Kashier's order-operation endpoint with the secret key; amount is in
- * EGP major units. Isolated here so the exact endpoint/payload shape — the one
- * remaining Kashier contract to confirm against their sandbox docs — is a
- * single-function change if it shifts.
+ *
+ * CONFIRMED against a real sandbox transaction (TX-474571105, 2026-07-03):
+ *   PUT {fep-host}/v3/orders/{kashierOrderId}
+ *   Authorization: <secret key> · body { apiOperation: "REFUND", reason,
+ *   transaction: { amount: "<EGP major>" } }
+ *   → 200 { response: { result: "SUCCESS", status: "REFUNDED", ... } }
+ * A repeat refund returns 400 { error: { cause: "fully refunded order" } } —
+ * treated as success so our refund stays idempotent end-to-end.
  */
 export async function kashierRefund(
   providerOrderId: string,
@@ -82,7 +86,7 @@ export async function kashierRefund(
   reason = "nilework_admin_refund",
 ): Promise<KashierRefundResult> {
   const secret = env.KASHIER_SECRET_KEY || env.KASHIER_API_KEY || "";
-  const res = await fetch(`${kashierApiBase()}/orders/${encodeURIComponent(providerOrderId)}`, {
+  const res = await fetch(`${kashierFepBase()}/v3/orders/${encodeURIComponent(providerOrderId)}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -104,6 +108,7 @@ export async function kashierRefund(
   }
   const record = (body ?? {}) as Record<string, unknown>;
   const response = (record.response ?? {}) as Record<string, unknown>;
+  const error = (record.error ?? {}) as Record<string, unknown>;
   const reference =
     typeof response.transactionId === "string"
       ? response.transactionId
@@ -111,5 +116,8 @@ export async function kashierRefund(
         ? record.transactionId
         : null;
 
-  return { ok: res.ok, status: res.status, reference, body };
+  // Already fully refunded at Kashier → success for idempotency.
+  const alreadyRefunded = error.cause === "fully refunded order";
+
+  return { ok: res.ok || alreadyRefunded, status: res.status, reference, body };
 }

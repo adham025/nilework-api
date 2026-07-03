@@ -97,3 +97,18 @@ describe("Kashier signature — properties", () => {
     );
   });
 });
+
+describe("Kashier signature — header source (real webhook shape)", () => {
+  it("verifies when the digest arrives via the x-kashier-signature header (no data.signature)", () => {
+    fc.assert(
+      fc.property(signedPayloadArb, ({ data, secret }) => {
+        const headerSig = data.signature as string;
+        const bodyOnly = { ...data };
+        bodyOnly.signature = undefined; // server webhooks carry no body signature
+        expect(verifyKashierSignature(bodyOnly, secret, headerSig)).toBe(true);
+        expect(verifyKashierSignature(bodyOnly, secret)).toBe(false);
+      }),
+      { numRuns: 200 },
+    );
+  });
+});

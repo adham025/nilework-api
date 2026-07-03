@@ -205,6 +205,7 @@ type KashierCallback = Record<string, unknown> & {
  */
 export async function handleKashierWebhook(
   body: Record<string, unknown>,
+  headerSignature?: string,
 ): Promise<{ handled: boolean }> {
   if (!isKashierConfigured) {
     throw new PaymentError("bad_request", "Kashier is not configured");
@@ -212,14 +213,15 @@ export async function handleKashierWebhook(
   // Kashier nests the signed fields under `data`; tolerate a flat body too.
   const data = (body.data && typeof body.data === "object" ? body.data : body) as KashierCallback;
   const secret = env.KASHIER_SECRET_KEY || env.KASHIER_API_KEY || "";
-  if (!verifyKashierSignature(data, secret)) {
+  if (!verifyKashierSignature(data, secret, headerSignature)) {
     throw new PaymentError("unauthorized", "Invalid signature");
   }
 
   const merchantRef = data.merchantOrderId === undefined ? "" : String(data.merchantOrderId);
   if (!merchantRef) throw new PaymentError("bad_request", "Missing merchantOrderId");
   const txnId = data.transactionId === undefined ? null : String(data.transactionId);
-  const providerOrderId = data.orderId === undefined ? null : String(data.orderId);
+  const rawProviderOrderId = data.orderId ?? (data as { kashierOrderId?: unknown }).kashierOrderId;
+  const providerOrderId = rawProviderOrderId === undefined ? null : String(rawProviderOrderId);
   const rawStatus = String(data.paymentStatus ?? data.status ?? "").toUpperCase();
   const success = rawStatus === "SUCCESS";
 
