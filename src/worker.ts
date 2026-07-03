@@ -2,6 +2,7 @@ import { closeDb } from "@/core/db";
 import { env } from "@/core/env";
 import { initSentry } from "@/core/sentry";
 import { refreshFxRate } from "@/modules/fx/fx.service";
+import { expireOffers } from "@/modules/offers/offers.service";
 import { settleHolds } from "@/modules/orders/orders.service";
 import { PgBoss } from "pg-boss";
 
@@ -13,6 +14,7 @@ import { PgBoss } from "pg-boss";
  */
 const SETTLE_HOLDS = "settle-holds";
 const FX_REFRESH = "fx-refresh";
+const EXPIRE_OFFERS = "expire-offers";
 
 async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
   try {
@@ -37,6 +39,7 @@ async function main() {
 
   await ensureQueue(boss, SETTLE_HOLDS);
   await ensureQueue(boss, FX_REFRESH);
+  await ensureQueue(boss, EXPIRE_OFFERS);
 
   await boss.work(SETTLE_HOLDS, async () => {
     const released = await settleHolds();
@@ -45,12 +48,19 @@ async function main() {
   await boss.work(FX_REFRESH, async () => {
     await refreshFxRate();
   });
+  await boss.work(EXPIRE_OFFERS, async () => {
+    const expired = await expireOffers();
+    if (expired > 0) console.log(`expire-offers: expired ${expired} offer(s)`);
+  });
 
   // Durable cron schedules (idempotent upserts).
   await boss.schedule(SETTLE_HOLDS, "*/5 * * * *"); // every 5 minutes
   await boss.schedule(FX_REFRESH, "0 * * * *"); // hourly
+  await boss.schedule(EXPIRE_OFFERS, "*/10 * * * *"); // every 10 minutes
 
-  console.log("nilework worker started (pg-boss: settle-holds */5m, fx-refresh hourly)");
+  console.log(
+    "nilework worker started (pg-boss: settle-holds */5m, fx-refresh hourly, expire-offers */10m)",
+  );
 
   const shutdown = async () => {
     await boss.stop({ graceful: true });

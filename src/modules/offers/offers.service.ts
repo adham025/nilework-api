@@ -158,3 +158,23 @@ async function transition(
     return rows[0]!;
   });
 }
+
+/**
+ * Scheduled sweep: expire pending offers past their expires_at
+ * (custom-offers-system Req 5). Idempotent — terminal offers are untouched;
+ * lazy expiry in acceptOffer remains as the race-safe backstop. Returns the
+ * number of offers expired so the worker can log activity.
+ */
+export async function expireOffers(): Promise<number> {
+  const sql = getDb();
+  const rows = await sql<{ id: string; freelancer_id: string }[]>`
+    update public.offers
+    set status = 'expired'
+    where status = 'pending' and expires_at is not null and expires_at < now()
+    returning id, freelancer_id
+  `;
+  for (const offer of rows) {
+    await notify(offer.freelancer_id, "offer_expired", { offer_id: offer.id });
+  }
+  return rows.length;
+}
