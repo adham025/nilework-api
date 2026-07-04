@@ -22,6 +22,7 @@ import { orderRoutes } from "@/modules/orders/orders.routes";
 import { paymentRoutes } from "@/modules/payments/payments.routes";
 import { payoutRoutes } from "@/modules/payouts/payouts.routes";
 import { planRoutes } from "@/modules/plans/plans.routes";
+import { portfolioRoutes } from "@/modules/portfolio/portfolio.routes";
 import { freelancerRoutes, profileRoutes } from "@/modules/profiles/profiles.routes";
 import { projectRoutes } from "@/modules/projects/projects.routes";
 import { promoRoutes } from "@/modules/promo/promo.routes";
@@ -102,6 +103,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(payoutRoutes, { prefix: "/v1" });
   await app.register(planRoutes, { prefix: "/v1" });
+  await app.register(portfolioRoutes, { prefix: "/v1" });
   await app.register(conversationRoutes, { prefix: "/v1" });
   await app.register(reviewRoutes, { prefix: "/v1" });
   await app.register(levelRoutes, { prefix: "/v1" });
