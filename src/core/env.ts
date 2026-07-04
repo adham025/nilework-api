@@ -84,7 +84,12 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProd = env.NODE_ENV === "production";
-export const corsOrigins = env.CORS_ORIGINS.split(",").map((o) => o.trim());
+// Normalized (lowercased, no trailing slash) so origin matching survives the
+// formatting variations proxies in front of the API (e.g. Render's edge) may
+// introduce on the incoming `Origin` header.
+export const corsOrigins = env.CORS_ORIGINS.split(",")
+  .map((o) => o.trim().replace(/\/$/, "").toLowerCase())
+  .filter(Boolean);
 
 /** True only when every Paymob credential is present — gates the real gateway path. */
 export const isPaymobConfigured = Boolean(

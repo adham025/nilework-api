@@ -77,7 +77,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(helmet);
-  await app.register(cors, { origin: corsOrigins, credentials: true });
+  await app.register(cors, {
+    credentials: true,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // same-origin / non-browser requests carry no Origin
+      cb(null, corsOrigins.includes(origin.trim().replace(/\/$/, "").toLowerCase()));
+    },
+  });
 
   // OpenAPI spec generated from the same Zod schemas (MASTER_PLAN §6.1).
   await app.register(swagger, {
