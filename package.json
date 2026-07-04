@@ -37,12 +37,14 @@
     "fastify-type-provider-zod": "^4.0.2",
     "pg-boss": "^12.23.0",
     "postgres": "^3.4.5",
+    "tesseract.js": "^7.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.10.5",
     "fast-check": "^4.8.0",
+    "jimp": "^1.6.1",
     "pino-pretty": "^13.0.0",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",

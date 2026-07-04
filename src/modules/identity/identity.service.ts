@@ -25,7 +25,8 @@ const MAX_ATTEMPTS = 5;
 
 const ID_COLUMNS = `
   id, profile_id, full_name, national_id_number, front_path, back_path,
-  status, review_note, reviewed_at, created_at, flagged_duplicate
+  status, review_note, reviewed_at, created_at, flagged_duplicate,
+  ocr_candidate, ocr_confidence
 `;
 
 function hashCode(code: string, profileId: string): string {
@@ -143,7 +144,7 @@ export async function submitIdentity(
     );
   }
 
-  return sql.begin(async (tx) => {
+  const verification = await sql.begin(async (tx) => {
     const rows = await tx<IdVerification[]>`
       insert into public.id_verifications
         (profile_id, full_name, national_id_number, front_path, back_path,
@@ -158,6 +159,32 @@ export async function submitIdentity(
     // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
     return rows[0]!;
   });
+
+  // OCR assist, fire-and-forget (Phase-1 deferral closed): local tesseract
+  // reads the front image and stores a cross-check candidate for the reviewer.
+  // Failures are logged and ignored — OCR never gates a submission.
+  void runOcrAssist(verification.id, input.front_path);
+
+  return verification;
+}
+
+/** Download the front image, OCR it, store candidate + confidence. Best-effort. */
+async function runOcrAssist(verificationId: string, frontPath: string): Promise<void> {
+  try {
+    const { data, error } = await supabaseAdmin.storage.from("identity-docs").download(frontPath);
+    if (error || !data) return;
+    const buffer = Buffer.from(await data.arrayBuffer());
+    const { extractNationalId } = await import("./ocr");
+    const result = await extractNationalId(buffer);
+    const sql = getDb();
+    await sql`
+      update public.id_verifications
+      set ocr_candidate = ${result.candidate}, ocr_confidence = ${result.confidence}
+      where id = ${verificationId}
+    `;
+  } catch (err) {
+    console.error(`ocr assist failed (${verificationId}):`, err);
+  }
 }
 
 export async function getVerificationStatus(profileId: string): Promise<VerificationStatus> {

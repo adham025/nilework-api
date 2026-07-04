@@ -40,6 +40,9 @@ export const IdVerificationSchema = z.object({
   created_at: z.string(),
   // Same national ID already approved on another account (identity Req 8).
   flagged_duplicate: z.boolean().default(false),
+  // OCR assist (local tesseract, fire-and-forget): reviewer cross-check only.
+  ocr_candidate: z.string().nullable().default(null),
+  ocr_confidence: z.number().int().nullable().default(null),
 });
 export type IdVerification = z.infer<typeof IdVerificationSchema>;
 
