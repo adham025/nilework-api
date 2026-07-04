@@ -29,6 +29,7 @@ import { redemptionRoutes } from "@/modules/redemptions/redemptions.routes";
 import { reviewRoutes } from "@/modules/reviews/reviews.routes";
 import { savedSearchRoutes } from "@/modules/saved-searches/saved-searches.routes";
 import { skillRoutes } from "@/modules/skills/skills.routes";
+import { trustRoutes } from "@/modules/trust/trust.routes";
 import { walletRoutes } from "@/modules/wallet/wallet.routes";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -106,6 +107,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(levelRoutes, { prefix: "/v1" });
   await app.register(skillRoutes, { prefix: "/v1" });
   await app.register(savedSearchRoutes, { prefix: "/v1" });
+  await app.register(trustRoutes, { prefix: "/v1" });
   await app.register(agencyRoutes, { prefix: "/v1" });
   await app.register(apiKeyRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });

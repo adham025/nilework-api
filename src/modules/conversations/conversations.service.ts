@@ -1,5 +1,6 @@
 import { getDb } from "@/core/db";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
+import { scanAndRecord } from "@/modules/trust/trust.service";
 import type {
   Conversation,
   ConversationListResponse,
@@ -127,16 +128,22 @@ export async function sendMessage(
 ): Promise<Message> {
   await assertParticipant(conversationId, senderId);
   const sql = getDb();
-  return sql.begin(async (tx) => {
-    const rows = await tx<Message[]>`
+  return sql
+    .begin(async (tx) => {
+      const rows = await tx<Message[]>`
       insert into public.messages (conversation_id, sender_id, body)
       values (${conversationId}, ${senderId}, ${body})
       returning id, conversation_id, sender_id, body, created_at
     `;
-    await tx`update public.conversations set last_message_at = now() where id = ${conversationId}`;
-    // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
-    return rows[0]!;
-  });
+      await tx`update public.conversations set last_message_at = now() where id = ${conversationId}`;
+      // biome-ignore lint/style/noNonNullAssertion: insert...returning yields one row.
+      return rows[0]!;
+    })
+    .then(async (message) => {
+      // Phase 4 fraud scan - best-effort, after commit, never blocks the send.
+      await scanAndRecord(senderId, "message", message.id, body);
+      return message;
+    });
 }
 
 // --- internals -------------------------------------------------------------
