@@ -37,6 +37,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   type ZodTypeProvider,
+  hasZodFastifySchemaValidationErrors,
   jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
@@ -55,6 +56,23 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Zod is the single validation + serialization layer (MASTER_PLAN §6.4).
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  // Request-validation failures must produce the platform's ApiError shape.
+  // Without this, Fastify's default error payload (error: "Bad Request" — a
+  // string) fails serialization on routes that declare 400: ApiErrorSchema
+  // (error must be an object), turning every bad request into a 500.
+  app.setErrorHandler((err, _req, reply) => {
+    if (hasZodFastifySchemaValidationErrors(err)) {
+      const detail = err.validation[0];
+      return reply.code(400).send({
+        error: {
+          code: "validation",
+          message: `${detail?.instancePath || "body"}: ${detail?.message ?? "invalid input"}`,
+        },
+      });
+    }
+    throw err;
+  });
 
   await app.register(helmet);
   await app.register(cors, { origin: corsOrigins, credentials: true });
