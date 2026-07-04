@@ -1,0 +1,62 @@
+# Render.com Blueprint for nilework-api (free tier — no card required).
+# Deploy: Render dashboard -> New -> Blueprint -> point at this repo.
+# Every `sync: false` var is entered directly in Render's own dashboard UI —
+# it never passes through chat or any third party. Non-secret values are
+# filled in here so there's nothing left to configure by hand.
+services:
+  - type: web
+    name: nilework-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: sh scripts/start-render.sh
+    healthCheckPath: /v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      - key: HOST
+        value: 0.0.0.0
+      # Vercel URL for the deployed web app (set once that's known).
+      - key: CORS_ORIGINS
+        sync: false
+      - key: WEB_BASE_URL
+        sync: false
+      # Supabase (Project Settings -> API / Database).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      # Duplicate-national-ID hash key (identity Req 8).
+      - key: ID_HASH_KEY
+        sync: false
+      # Payments: Kashier is the launch gateway (test mode until Kashier
+      # approves the merchant account; switch KASHIER_MODE to live then).
+      - key: PAYMENT_PROVIDER
+        value: kashier
+      - key: KASHIER_MERCHANT_ID
+        sync: false
+      - key: KASHIER_API_KEY
+        sync: false
+      - key: KASHIER_SECRET_KEY
+        sync: false
+      - key: KASHIER_MODE
+        value: test
+      # This service's own public URL, for the Kashier webhook callback.
+      - key: API_BASE_URL
+        sync: false
+      # Dev "log" mode: OTP codes print to the Render log instead of an SMS
+      # provider (no CPaaS account exists yet — same as local dev).
+      - key: OTP_PROVIDER
+        value: log
+      - key: FX_API_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
