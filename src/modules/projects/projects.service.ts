@@ -1,6 +1,7 @@
 import { getDb } from "@/core/db";
 import { getPublicConfig } from "@/modules/config/config.service";
-import { freelancerTier, tierCommissionBps } from "@/modules/levels/levels.service";
+import { freelancerTier, tierCommissionBps, tierFor } from "@/modules/levels/levels.service";
+import { matchScore } from "@/modules/matching/match-score";
 import { notify } from "@/modules/notifications/notifications.service";
 import { insertOrder } from "@/modules/orders/orders.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
@@ -235,28 +236,82 @@ export async function submitProposal(
   return created.proposal;
 }
 
-/** Client view: all proposals on their project, with freelancer cards. */
+/**
+ * Client view: all proposals on their project with freelancer cards, ranked by
+ * the deterministic match score (Phase 4b) — best fit first, ties broken by
+ * submission time. Aggregates come from one query; scoring stays in the pure
+ * matchScore function so the ranking is explainable and property-tested.
+ */
 export async function listProposals(
   projectId: string,
   clientId: string,
 ): Promise<ProposalListItem[]> {
   const sql = getDb();
-  const owner = await sql<{ client_id: string }[]>`
-    select client_id from public.projects where id = ${projectId}
+  const owner = await sql<
+    {
+      client_id: string;
+      category_id: string;
+      budget_min_usd_minor: number;
+      budget_max_usd_minor: number;
+    }[]
+  >`
+    select client_id, category_id, budget_min_usd_minor, budget_max_usd_minor
+    from public.projects where id = ${projectId}
   `;
-  if (!owner[0]) throw new ProjectError("not_found", "Project not found");
-  if (owner[0].client_id !== clientId) throw new ProjectError("forbidden", "Not your project");
+  const project = owner[0];
+  if (!project) throw new ProjectError("not_found", "Project not found");
+  if (project.client_id !== clientId) throw new ProjectError("forbidden", "Not your project");
 
-  return sql<ProposalListItem[]>`
+  const rows = await sql<
+    (ProposalListItem & {
+      fl_completed: number;
+      fl_reviews: number;
+      fl_rating: number | null;
+      fl_category_match: boolean;
+    })[]
+  >`
     select
       pp.id, pp.project_id, pp.freelancer_id, pp.cover_letter, pp.price_usd_minor,
       pp.delivery_days, pp.status, pp.order_id, pp.created_at, pp.updated_at,
-      json_build_object('id', f.id, 'display_name', f.display_name, 'avatar_url', f.avatar_url) as freelancer
+      json_build_object('id', f.id, 'display_name', f.display_name, 'avatar_url', f.avatar_url) as freelancer,
+      (select count(*) from public.orders o
+        where o.freelancer_id = pp.freelancer_id and o.status = 'released')::int as fl_completed,
+      (select count(*) from public.reviews r
+        where r.reviewee_id = pp.freelancer_id)::int as fl_reviews,
+      (select avg(r.rating)::float8 from public.reviews r
+        where r.reviewee_id = pp.freelancer_id) as fl_rating,
+      exists(select 1 from public.gigs g
+        where g.freelancer_id = pp.freelancer_id
+          and g.category_id = ${project.category_id}
+          and g.status = 'active') as fl_category_match
     from public.proposals pp
     join public.profiles f on f.id = pp.freelancer_id
     where pp.project_id = ${projectId} and pp.status <> 'withdrawn'
     order by pp.created_at asc
   `;
+
+  const budgetMid =
+    (Number(project.budget_min_usd_minor) + Number(project.budget_max_usd_minor)) / 2;
+  const scored = rows.map((row) => {
+    const { fl_completed, fl_reviews, fl_rating, fl_category_match, ...proposal } = row;
+    const { level } = tierFor(fl_completed, fl_rating, fl_reviews);
+    const match_score = matchScore({
+      avgRating: fl_rating,
+      reviewCount: fl_reviews,
+      completedOrders: fl_completed,
+      tier: level,
+      categoryMatch: fl_category_match,
+      priceRatio: budgetMid > 0 ? proposal.price_usd_minor / budgetMid : null,
+      daysSinceActive: null,
+    });
+    return { ...proposal, match_score };
+  });
+
+  return scored.sort(
+    (a, b) =>
+      (b.match_score ?? 0) - (a.match_score ?? 0) ||
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
 }
 
 /** Freelancer view: their proposals across projects. */

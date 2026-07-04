@@ -112,6 +112,8 @@ export const ProposalListItemSchema = ProposalSchema.extend({
     display_name: z.string().nullable(),
     avatar_url: z.string().nullable(),
   }),
+  // Deterministic freelancer-fit score 0-100 (Phase 4b) - explainable ranking.
+  match_score: z.number().int().min(0).max(100).optional(),
 });
 export type ProposalListItem = z.infer<typeof ProposalListItemSchema>;
 
