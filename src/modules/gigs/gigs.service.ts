@@ -52,6 +52,11 @@ export async function createGig(freelancerId: string, input: GigCreateInput): Pr
 export async function listGigs(query: GigListQuery): Promise<GigListResponse> {
   const sql = getDb();
   const { limit } = query;
+  // Dialect-tolerant keyword search (Phase 4c): the DB folds hamza/teh-marbuta/
+  // maqsura variants + diacritics on both the indexed document and the query,
+  // so "التصميم", "تصمीم", and "tasmeem-style typos" behave sensibly. FTS first
+  // (word matches), OR trigram similarity on the title (typos/partials).
+  const q = query.q?.trim() || null;
 
   const rows = await sql<GigListItem[]>`
     select
@@ -65,6 +70,14 @@ export async function listGigs(query: GigListQuery): Promise<GigListResponse> {
     join public.categories c on c.id = g.category_id
     join public.profiles p on p.id = g.freelancer_id
     where g.status = 'active'
+      ${
+        q
+          ? sql`and (
+              g.search_tsv @@ plainto_tsquery('simple', public.normalize_arabic(${q}))
+              or word_similarity(public.normalize_arabic(${q}), public.normalize_arabic(g.title)) > 0.4
+            )`
+          : sql``
+      }
       ${query.category ? sql`and c.slug = ${query.category}` : sql``}
       ${query.price_min !== undefined ? sql`and g.price_usd_minor >= ${query.price_min}` : sql``}
       ${query.price_max !== undefined ? sql`and g.price_usd_minor <= ${query.price_max}` : sql``}
@@ -73,8 +86,10 @@ export async function listGigs(query: GigListQuery): Promise<GigListResponse> {
       ${query.cursor ? sql`and g.created_at < ${query.cursor}` : sql``}
     -- Featured gigs float to the top of the first page (§5.3 redemption reward);
     -- deeper pages page purely by created_at to keep the cursor consistent.
+    -- With a search query, relevance leads instead.
     order by
-      ${query.cursor ? sql`` : sql`coalesce(g.featured_until > now(), false) desc,`}
+      ${q ? sql`ts_rank(g.search_tsv, plainto_tsquery('simple', public.normalize_arabic(${q}))) desc,` : sql``}
+      ${query.cursor || q ? sql`` : sql`coalesce(g.featured_until > now(), false) desc,`}
       g.created_at desc
     limit ${limit + 1}
   `;

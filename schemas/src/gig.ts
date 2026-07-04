@@ -60,6 +60,9 @@ export const GigStatusUpdateSchema = z.object({ status: GigStatusSchema });
 /** Browse query params for the public gig listing — incl. advanced filters (§5 Phase 3). */
 export const GigListQuerySchema = z.object({
   category: z.string().optional(),
+  // Keyword search, Arabic-dialect tolerant (Phase 4c): hamza/teh-marbuta/
+  // maqsura variants and diacritics are folded server-side.
+  q: z.string().max(120).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(48).default(24),
   price_min: z.coerce.number().int().nonnegative().optional(),
