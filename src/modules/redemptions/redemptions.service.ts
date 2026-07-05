@@ -1,16 +1,11 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import type { CatalogItem } from "@nilework/schemas";
 
 /** Typed error so routes can map redemption failures to HTTP codes. */
-export class RedemptionError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict" | "bad_request",
-    message: string,
-  ) {
-    super(message);
-    this.name = "RedemptionError";
-  }
-}
+export class RedemptionError extends DomainError<
+  "not_found" | "forbidden" | "conflict" | "bad_request"
+> {}
 
 export async function listCatalog(): Promise<CatalogItem[]> {
   const sql = getDb();

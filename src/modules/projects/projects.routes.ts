@@ -1,5 +1,7 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
+  IdParamSchema,
   ProjectCreateSchema,
   ProjectListItemSchema,
   ProjectListQuerySchema,
@@ -14,7 +16,6 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  ProjectError,
   acceptProposal,
   createProject,
   getProject,
@@ -30,18 +31,8 @@ import {
 
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409, invalid: 400 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof ProjectError) {
-      await reply
-        .code(STATUS_BY_CODE[err.code])
-        .send({ error: { code: err.code, message: err.message } });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
 
 export async function projectRoutes(app: FastifyInstance): Promise<void> {
@@ -98,7 +89,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Get a project by id",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: ProjectListItemSchema },
       },
     },
@@ -133,7 +124,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Update project status (owner only; awarding happens via acceptance)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         body: ProjectStatusUpdateSchema,
         response: { 200: ProjectSchema },
       },
@@ -153,7 +144,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Submit a proposal on an open project",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         body: ProposalCreateSchema,
         response: { 201: ProposalSchema },
       },
@@ -175,7 +166,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "List proposals on a project (owner only)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: ProposalListSchema },
       },
     },
@@ -191,7 +182,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Withdraw a pending/shortlisted proposal (author only)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: ProposalSchema },
       },
     },
@@ -207,7 +198,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Shortlist a proposal (project owner only)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: ProposalSchema },
       },
     },
@@ -225,7 +216,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Decline a proposal (project owner only)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: ProposalSchema },
       },
     },
@@ -244,7 +235,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["projects"],
         summary: "Accept a proposal: creates the escrow order and awards the project",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: z.object({ proposal: ProposalSchema, order_id: z.string().uuid() }) },
       },
     },

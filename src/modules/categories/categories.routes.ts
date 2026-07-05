@@ -1,8 +1,12 @@
 import { getDb } from "@/core/db";
-import { type Category, CategoryListSchema, CategoryPriceStatsSchema } from "@nilework/schemas";
+import {
+  type Category,
+  CategoryListSchema,
+  CategoryPriceStatsSchema,
+  IdParamSchema,
+} from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 
 /** Anti-lowball reference: a price below this fraction of the category median is flagged. */
 const FLOOR_FRACTION = 0.4;
@@ -37,7 +41,7 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["marketplace"],
         summary: "Median active-gig price for a category (anti-lowball reference)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: CategoryPriceStatsSchema },
       },
     },

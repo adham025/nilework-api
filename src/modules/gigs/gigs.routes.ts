@@ -7,6 +7,7 @@ import {
   GigListResponseSchema,
   GigSchema,
   GigStatusUpdateSchema,
+  IdParamSchema,
 } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -92,7 +93,7 @@ export async function gigRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["marketplace"],
         summary: "Update a gig's status (owner only)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         body: GigStatusUpdateSchema,
         response: { 200: GigSchema, 401: ApiErrorSchema, 404: ApiErrorSchema },
       },

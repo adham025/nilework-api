@@ -1,11 +1,14 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import { auditLog } from "@/modules/admin/audit.service";
 import {
   ApiErrorSchema,
+  IdParamSchema as IdParam,
   IdRejectSchema,
   IdVerificationListSchema,
   IdVerificationSchema,
   IdentitySubmitSchema,
+  OkResponseSchema,
   PhoneStartResultSchema,
   PhoneStartSchema,
   PhoneVerifySchema,
@@ -16,7 +19,6 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  IdentityError,
   getVerificationStatus,
   listPendingIdentity,
   reviewIdentity,
@@ -33,21 +35,9 @@ const STATUS_BY_CODE = {
   invalid_national_id: 400,
 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof IdentityError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
-
-const IdParam = z.object({ id: z.string().uuid() });
 
 export async function identityRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -93,7 +83,7 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
         summary: "Verify the phone code",
         body: PhoneVerifySchema,
         response: {
-          200: z.object({ ok: z.boolean() }),
+          200: OkResponseSchema,
           401: ApiErrorSchema,
           409: ApiErrorSchema,
           429: ApiErrorSchema,

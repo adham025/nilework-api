@@ -1,19 +1,12 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { grantPoints } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import type { PromoCode, PromoCreateInput, PromoValidation } from "@nilework/schemas";
 import type { Sql, TransactionSql } from "postgres";
 
 /** Typed error so routes can map promo failures to HTTP codes. */
-export class PromoError extends Error {
-  constructor(
-    public code: "not_found" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "PromoError";
-  }
-}
+export class PromoError extends DomainError<"not_found" | "conflict"> {}
 
 const PROMO_COLUMNS = `
   id, code, type, value, max_redemptions, redeemed_count, per_user_limit,

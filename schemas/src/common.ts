@@ -31,3 +31,19 @@ export const ApiErrorSchema = z.object({
   }),
 });
 export type ApiError = z.infer<typeof ApiErrorSchema>;
+
+/** A single UUID route param named `id` — the most common param shape by far. */
+export const IdParamSchema = z.object({ id: z.string().uuid() });
+export type IdParam = z.infer<typeof IdParamSchema>;
+
+/** Plain acknowledgement response for actions with no richer return value. */
+export const OkResponseSchema = z.object({ ok: z.boolean() });
+export type OkResponse = z.infer<typeof OkResponseSchema>;
+
+/** Cursor-paginated list envelope for a given item schema — pairs with PaginationQuerySchema. */
+export function cursorPage<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.object({
+    items: z.array(itemSchema),
+    next_cursor: z.string().nullable(),
+  });
+}

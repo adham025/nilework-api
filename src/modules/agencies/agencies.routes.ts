@@ -1,4 +1,5 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   AgencyAddMemberSchema,
   AgencyCreateSchema,
@@ -10,7 +11,6 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  AgencyError,
   addMember,
   createAgency,
   getMyAgency,
@@ -21,18 +21,8 @@ import {
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
 const OK = z.object({ ok: z.boolean() });
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof AgencyError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
 
 export async function agencyRoutes(app: FastifyInstance): Promise<void> {

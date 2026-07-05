@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { estimateMinor, getLatestRate } from "@/modules/fx/fx.service";
 import { notify } from "@/modules/notifications/notifications.service";
@@ -12,15 +13,9 @@ import type {
 import type { TransactionSql } from "postgres";
 
 /** Typed error so routes can map payout failures to HTTP codes. */
-export class PayoutError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict" | "unprocessable",
-    message: string,
-  ) {
-    super(message);
-    this.name = "PayoutError";
-  }
-}
+export class PayoutError extends DomainError<
+  "not_found" | "forbidden" | "conflict" | "unprocessable"
+> {}
 
 const PAYOUT_COLUMNS = `
   id, profile_id, amount_usd_minor, amount_egp_minor, fx_rate_id,

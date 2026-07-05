@@ -1,4 +1,5 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
   CatalogListSchema,
@@ -7,7 +8,7 @@ import {
 } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { RedemptionError, listCatalog, redeem } from "./redemptions.service";
+import { listCatalog, redeem } from "./redemptions.service";
 
 const STATUS_BY_CODE = {
   not_found: 404,
@@ -16,18 +17,8 @@ const STATUS_BY_CODE = {
   bad_request: 400,
 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof RedemptionError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
 
 export async function redemptionRoutes(app: FastifyInstance): Promise<void> {

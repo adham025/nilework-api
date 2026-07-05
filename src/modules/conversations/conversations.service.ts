@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import { scanAndRecord } from "@/modules/trust/trust.service";
 import type {
@@ -11,15 +12,7 @@ import type {
 } from "@nilework/schemas";
 
 /** Typed error so routes can map conversation failures to HTTP codes. */
-export class ConversationError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "ConversationError";
-  }
-}
+export class ConversationError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
 
 const CONVO_COLUMNS = `
   id, client_id, freelancer_id, gig_id, last_message_at, created_at, updated_at

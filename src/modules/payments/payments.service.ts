@@ -1,5 +1,6 @@
 import { getDb } from "@/core/db";
 import { activePaymentProvider, env, isKashierConfigured, isPaymobConfigured } from "@/core/env";
+import { DomainError } from "@/core/errors";
 import { estimateMinor, getLatestRate } from "@/modules/fx/fx.service";
 import { OrderError, fundEscrow } from "@/modules/orders/orders.service";
 import { getProfile } from "@/modules/profiles/profiles.service";
@@ -16,15 +17,7 @@ import {
 import { verifyPaymobHmac } from "./paymob.hmac";
 
 /** Typed error so the webhook route maps gateway failures to the right HTTP code. */
-export class PaymentError extends Error {
-  constructor(
-    public code: "unauthorized" | "bad_request" | "not_found",
-    message: string,
-  ) {
-    super(message);
-    this.name = "PaymentError";
-  }
-}
+export class PaymentError extends DomainError<"unauthorized" | "bad_request" | "not_found"> {}
 
 interface CheckoutOrder {
   id: string;

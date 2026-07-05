@@ -1,18 +1,11 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 import type { Agency, AgencyMember, MyAgency } from "@nilework/schemas";
 
 /** Typed error so routes can map agency failures to HTTP codes. */
-export class AgencyError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "AgencyError";
-  }
-}
+export class AgencyError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
 
 async function membershipOf(
   profileId: string,

@@ -1,7 +1,9 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
   CertifiedSkillListSchema,
+  IdParamSchema,
   SkillResultSchema,
   SkillSubmitSchema,
   SkillTestDetailSchema,
@@ -10,22 +12,12 @@ import {
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { SkillError, getTest, listCertified, listTests, submitTest } from "./skills.service";
+import { getTest, listCertified, listTests, submitTest } from "./skills.service";
 
 const STATUS_BY_CODE = { not_found: 404, conflict: 409, bad_request: 400 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof SkillError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
 
 const SlugParam = z.object({ slug: z.string().min(1).max(60) });
@@ -91,7 +83,7 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["skills"],
         summary: "Public: a profile's certified skills",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: CertifiedSkillListSchema },
       },
     },

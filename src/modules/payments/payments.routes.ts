@@ -1,7 +1,7 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import { auditLog } from "@/modules/admin/audit.service";
-import { OrderError } from "@/modules/orders/orders.service";
-import { ApiErrorSchema, CheckoutResponseSchema } from "@nilework/schemas";
+import { ApiErrorSchema, CheckoutResponseSchema, IdParamSchema } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -28,7 +28,7 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["payments"],
         summary: "Begin payment for an order (client) — Paymob iframe or dev simulation",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: {
           200: CheckoutResponseSchema,
           401: ApiErrorSchema,
@@ -38,19 +38,11 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    async (req, reply) => {
-      try {
+    (req, reply) =>
+      runDomain(reply, ORDER_STATUS_BY_CODE, () =>
         // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-        return await initiateCheckout(req.params.id, req.authUser!.id);
-      } catch (err) {
-        if (err instanceof OrderError) {
-          return reply
-            .code(ORDER_STATUS_BY_CODE[err.code])
-            .send({ error: { code: err.code, message: err.message } });
-        }
-        throw err;
-      }
-    },
+        initiateCheckout(req.params.id, req.authUser!.id),
+      ),
   );
 
   // Paymob "transaction processed" callback. Public, but HMAC-verified in the service.
@@ -70,22 +62,17 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    async (req, reply) => {
-      try {
+    (req, reply) =>
+      runDomain(reply, PAYMENT_STATUS_BY_CODE, async () => {
         await handlePaymobWebhook(req.body.obj, req.query.hmac ?? "");
         return { received: true };
-      } catch (err) {
-        if (err instanceof PaymentError) {
-          return reply
-            .code(PAYMENT_STATUS_BY_CODE[err.code])
-            .send({ error: { code: err.code, message: err.message } });
-        }
-        throw err;
-      }
-    },
+      }),
   );
 
   // Kashier payment callback. Public, but signature-verified in the service.
+  // Records the webhook attempt (verified/processed/error) even on failure —
+  // that side effect has to happen inside the catch, so this route keeps its
+  // own try/catch rather than the shared runDomain wrapper.
   r.post(
     "/payments/kashier/webhook",
     {
@@ -165,8 +152,8 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         },
       },
     },
-    async (req, reply) => {
-      try {
+    (req, reply) =>
+      runDomain(reply, PAYMENT_STATUS_BY_CODE, async () => {
         const result = await refundPayment(req.params.orderId);
         // biome-ignore lint/style/noNonNullAssertion: requireStaff guarantees staffUser.
         await auditLog(req.staffUser!.id, "payment_refunded", "order", req.params.orderId, {
@@ -174,14 +161,6 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
           refund_ref: result.refund_ref,
         });
         return result;
-      } catch (err) {
-        if (err instanceof PaymentError) {
-          return reply
-            .code(PAYMENT_STATUS_BY_CODE[err.code])
-            .send({ error: { code: err.code, message: err.message } });
-        }
-        throw err;
-      }
-    },
+      }),
   );
 }

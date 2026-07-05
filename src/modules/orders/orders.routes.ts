@@ -1,6 +1,8 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
+  IdParamSchema as IdParam,
   OrderCreateSchema,
   OrderDetailSchema,
   OrderListQuerySchema,
@@ -8,9 +10,7 @@ import {
 } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import {
-  OrderError,
   cancelOrder,
   createOrder,
   getOrder,
@@ -22,21 +22,9 @@ import {
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
 
 /** Run an order action, translating OrderError into the right HTTP response. */
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof OrderError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
-
-const IdParam = z.object({ id: z.string().uuid() });
 
 /** Order + escrow state-machine endpoints (§6). All party-scoped + authenticated. */
 export async function orderRoutes(app: FastifyInstance): Promise<void> {

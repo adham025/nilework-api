@@ -1,20 +1,14 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { supabaseAdmin } from "@/core/supabase";
 import { notify } from "@/modules/notifications/notifications.service";
+import { assertOrderParty, getOrderParties } from "@/modules/orders/orders.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
 import type { Dispute, DisputeMessage, DisputeResolution } from "@nilework/schemas";
 import type { TransactionSql } from "postgres";
 
 /** Typed error so routes can map dispute failures to HTTP codes. */
-export class DisputeError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "DisputeError";
-  }
-}
+export class DisputeError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
 
 const DISPUTE_COLUMNS = `
   id, order_id, opened_by, opener_role, reason, status, resolution,
@@ -91,14 +85,8 @@ export async function openDispute(
 /** Party-scoped fetch of an order's dispute (or null). */
 export async function getDisputeForOrder(orderId: string, userId: string): Promise<Dispute | null> {
   const sql = getDb();
-  const orders = await sql<{ client_id: string; freelancer_id: string }[]>`
-    select client_id, freelancer_id from public.orders where id = ${orderId} limit 1
-  `;
-  const order = orders[0];
-  if (!order) throw new DisputeError("not_found", "Order not found");
-  if (order.client_id !== userId && order.freelancer_id !== userId) {
-    throw new DisputeError("forbidden", "Not your order");
-  }
+  const order = await getOrderParties(orderId);
+  assertOrderParty(order, userId, DisputeError, "not_found", "forbidden");
   const rows = await sql<Dispute[]>`
     select ${sql.unsafe(DISPUTE_COLUMNS)} from public.disputes where order_id = ${orderId} limit 1
   `;

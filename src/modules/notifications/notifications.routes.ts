@@ -1,12 +1,13 @@
 import { requireAuth } from "@/core/auth";
 import {
   ApiErrorSchema,
+  IdParamSchema,
   NotificationListResponseSchema,
+  OkResponseSchema,
   PaginationQuerySchema,
 } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import { listNotifications, markAllRead, markRead } from "./notifications.service";
 
 export async function notificationRoutes(app: FastifyInstance): Promise<void> {
@@ -34,8 +35,8 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["notifications"],
         summary: "Mark one notification read",
-        params: z.object({ id: z.string().uuid() }),
-        response: { 200: z.object({ ok: z.boolean() }), 401: ApiErrorSchema },
+        params: IdParamSchema,
+        response: { 200: OkResponseSchema, 401: ApiErrorSchema },
       },
     },
     async (req) => {
@@ -52,7 +53,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["notifications"],
         summary: "Mark all notifications read",
-        response: { 200: z.object({ ok: z.boolean() }), 401: ApiErrorSchema },
+        response: { 200: OkResponseSchema, 401: ApiErrorSchema },
       },
     },
     async (req) => {

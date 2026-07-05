@@ -1,6 +1,8 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
+  IdParamSchema as IdParam,
   ProfileReviewsResponseSchema,
   ReviewCreateSchema,
   ReviewListSchema,
@@ -8,26 +10,13 @@ import {
 } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
-import { ReviewError, createReview, getProfileReviews, listOrderReviews } from "./reviews.service";
+import { createReview, getProfileReviews, listOrderReviews } from "./reviews.service";
 
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof ReviewError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
-
-const IdParam = z.object({ id: z.string().uuid() });
 
 export async function reviewRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();

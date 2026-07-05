@@ -1,6 +1,8 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
+  IdParamSchema as IdParam,
   PaginationQuerySchema,
   PayoutCreateSchema,
   PayoutListResponseSchema,
@@ -10,9 +12,7 @@ import {
 } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import {
-  PayoutError,
   cancelPayout,
   listMyPayouts,
   listPendingPayouts,
@@ -29,21 +29,9 @@ const STATUS_BY_CODE = {
   unprocessable: 422,
 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof PayoutError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
-
-const IdParam = z.object({ id: z.string().uuid() });
 
 export async function payoutRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();

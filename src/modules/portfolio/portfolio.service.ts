@@ -1,16 +1,11 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
 
 /** Typed error so routes can map portfolio failures to HTTP codes. */
-export class PortfolioError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "bad_request" | "upstream",
-    message: string,
-  ) {
-    super(message);
-    this.name = "PortfolioError";
-  }
-}
+export class PortfolioError extends DomainError<
+  "not_found" | "forbidden" | "bad_request" | "upstream"
+> {}
 
 export interface PortfolioItem {
   id: string;

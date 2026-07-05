@@ -1,29 +1,15 @@
 import { requireAuth } from "@/core/auth";
-import { ApiErrorSchema } from "@nilework/schemas";
+import { runDomain } from "@/core/errors";
+import { ApiErrorSchema, IdParamSchema, OkResponseSchema } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  PortfolioError,
-  importGithub,
-  listPortfolio,
-  removePortfolioItem,
-} from "./portfolio.service";
+import { importGithub, listPortfolio, removePortfolioItem } from "./portfolio.service";
 
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, bad_request: 400, upstream: 502 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof PortfolioError) {
-      await reply
-        .code(STATUS_BY_CODE[err.code])
-        .send({ error: { code: err.code, message: err.message } });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
 
 const PortfolioItemSchema = z.object({
@@ -47,7 +33,7 @@ export async function portfolioRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["marketplace"],
         summary: "A freelancer's public portfolio items",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: z.array(PortfolioItemSchema) },
       },
     },
@@ -85,9 +71,9 @@ export async function portfolioRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["profiles"],
         summary: "Remove one of the caller's portfolio items",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: {
-          200: z.object({ ok: z.boolean() }),
+          200: OkResponseSchema,
           401: ApiErrorSchema,
           404: ApiErrorSchema,
         },

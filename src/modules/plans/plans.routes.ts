@@ -1,8 +1,12 @@
 import { requireAuth } from "@/core/auth";
-import { ApiErrorSchema, PlanBadgeSchema, SubscriptionSchema } from "@nilework/schemas";
+import {
+  ApiErrorSchema,
+  IdParamSchema,
+  PlanBadgeSchema,
+  SubscriptionSchema,
+} from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import { activatePro, getMySubscription, isPro } from "./plans.service";
 
 export async function planRoutes(app: FastifyInstance): Promise<void> {
@@ -42,7 +46,7 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["plans"],
         summary: "Public Pro flag for a profile (badge)",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: PlanBadgeSchema },
       },
     },

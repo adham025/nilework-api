@@ -1,4 +1,5 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import { auditLog } from "@/modules/admin/audit.service";
 import {
   ApiErrorSchema,
@@ -9,12 +10,12 @@ import {
   DisputeOpenSchema,
   DisputeResolveSchema,
   DisputeSchema,
+  IdParamSchema as IdParam,
 } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  DisputeError,
   getDisputeForOrder,
   listDisputeMessages,
   listDisputeThreadStaff,
@@ -28,21 +29,9 @@ import {
 
 const STATUS_BY_CODE = { not_found: 404, forbidden: 403, conflict: 409 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof DisputeError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
-
-const IdParam = z.object({ id: z.string().uuid() });
 
 export async function disputeRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();

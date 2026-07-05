@@ -1,19 +1,15 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { qualifyReferral } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
+import { assertOrderParty, getOrderParties } from "@/modules/orders/orders.service";
 import { ensureWallet, postLedgerEntry } from "@/modules/wallet/wallet.service";
 import type { Milestone, MilestoneCreateInput } from "@nilework/schemas";
 
 /** Typed error so routes can map milestone failures to HTTP codes. */
-export class MilestoneError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict" | "unprocessable",
-    message: string,
-  ) {
-    super(message);
-    this.name = "MilestoneError";
-  }
-}
+export class MilestoneError extends DomainError<
+  "not_found" | "forbidden" | "conflict" | "unprocessable"
+> {}
 
 const M_COLUMNS = `
   id, order_id, title, amount_usd_minor, sequence, status, delivered_at, released_at,
@@ -77,14 +73,8 @@ export async function createMilestones(
 
 export async function listMilestones(orderId: string, viewerId: string): Promise<Milestone[]> {
   const sql = getDb();
-  const orders = await sql<{ client_id: string; freelancer_id: string }[]>`
-    select client_id, freelancer_id from public.orders where id = ${orderId} limit 1
-  `;
-  const order = orders[0];
-  if (!order) throw new MilestoneError("not_found", "Order not found");
-  if (order.client_id !== viewerId && order.freelancer_id !== viewerId) {
-    throw new MilestoneError("forbidden", "Not your order");
-  }
+  const order = await getOrderParties(orderId);
+  assertOrderParty(order, viewerId, MilestoneError, "not_found", "forbidden");
   return sql<Milestone[]>`
     select ${sql.unsafe(M_COLUMNS)} from public.milestones where order_id = ${orderId} order by sequence
   `;

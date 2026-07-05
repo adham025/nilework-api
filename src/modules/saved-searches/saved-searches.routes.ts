@@ -1,13 +1,14 @@
 import { requireAuth } from "@/core/auth";
 import {
   ApiErrorSchema,
+  IdParamSchema,
+  OkResponseSchema,
   SavedSearchCreateSchema,
   SavedSearchListSchema,
   SavedSearchSchema,
 } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import { createSavedSearch, deleteSavedSearch, listSavedSearches } from "./saved-searches.service";
 
 export async function savedSearchRoutes(app: FastifyInstance): Promise<void> {
@@ -52,8 +53,8 @@ export async function savedSearchRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["discovery"],
         summary: "Delete a saved search",
-        params: z.object({ id: z.string().uuid() }),
-        response: { 200: z.object({ ok: z.boolean() }), 401: ApiErrorSchema },
+        params: IdParamSchema,
+        response: { 200: OkResponseSchema, 401: ApiErrorSchema },
       },
     },
     async (req) => {

@@ -1,15 +1,16 @@
 import { requireAuth } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
   MilestoneCreateSchema,
   MilestoneListSchema,
   MilestoneSchema,
+  IdParamSchema as OrderParam,
 } from "@nilework/schemas";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  MilestoneError,
   createMilestones,
   deliverMilestone,
   listMilestones,
@@ -23,21 +24,10 @@ const STATUS_BY_CODE = {
   unprocessable: 422,
 } as const;
 
-async function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof MilestoneError) {
-      await reply.code(STATUS_BY_CODE[err.code]).send({
-        error: { code: err.code, message: err.message },
-      });
-      return undefined;
-    }
-    throw err;
-  }
+function run<T>(reply: FastifyReply, fn: () => Promise<T>): Promise<T | undefined> {
+  return runDomain(reply, STATUS_BY_CODE, fn);
 }
 
-const OrderParam = z.object({ id: z.string().uuid() });
 const MilestoneParam = z.object({ id: z.string().uuid(), mid: z.string().uuid() });
 
 export async function milestoneRoutes(app: FastifyInstance): Promise<void> {

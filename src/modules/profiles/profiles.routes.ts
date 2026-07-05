@@ -4,13 +4,13 @@ import {
   ApiErrorSchema,
   FreelancerListQuerySchema,
   FreelancerListResponseSchema,
+  IdParamSchema,
   ProfileSchema,
   ProfileUpdateSchema,
   PublicFreelancerSchema,
 } from "@nilework/schemas";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import {
   ensureProfile,
   getPublicFreelancer,
@@ -82,7 +82,7 @@ export async function freelancerRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ["marketplace"],
         summary: "Public freelancer profile",
-        params: z.object({ id: z.string().uuid() }),
+        params: IdParamSchema,
         response: { 200: PublicFreelancerSchema, 404: ApiErrorSchema },
       },
     },

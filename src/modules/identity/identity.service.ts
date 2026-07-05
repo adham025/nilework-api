@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomInt } from "node:crypto";
 import { getDb } from "@/core/db";
 import { env } from "@/core/env";
+import { DomainError } from "@/core/errors";
 import { supabaseAdmin } from "@/core/supabase";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
@@ -9,15 +10,9 @@ import { parseEgyptianNationalId } from "./egyptian-id";
 import { isOtpDevMode, sendOtp } from "./otp";
 
 /** Typed error so routes can map identity failures to HTTP codes. */
-export class IdentityError extends Error {
-  constructor(
-    public code: "not_found" | "conflict" | "too_many" | "invalid_national_id",
-    message: string,
-  ) {
-    super(message);
-    this.name = "IdentityError";
-  }
-}
+export class IdentityError extends DomainError<
+  "not_found" | "conflict" | "too_many" | "invalid_national_id"
+> {}
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_SENDS_PER_HOUR = 5;

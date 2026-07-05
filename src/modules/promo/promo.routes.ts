@@ -1,4 +1,5 @@
 import { requireAuth, requireStaff } from "@/core/auth";
+import { runDomain } from "@/core/errors";
 import {
   ApiErrorSchema,
   PromoCodeListSchema,
@@ -11,7 +12,11 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { PromoError, createPromo, listPromos, redeemPoints, validatePromo } from "./promo.service";
+import { createPromo, listPromos, redeemPoints, validatePromo } from "./promo.service";
+
+// Both PromoError codes map to 409 here — preserved from the original inline
+// handler, which sent a flat 409 regardless of "not_found" vs "conflict".
+const STATUS_BY_CODE = { not_found: 409, conflict: 409 } as const;
 
 export async function promoRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -44,17 +49,11 @@ export async function promoRoutes(app: FastifyInstance): Promise<void> {
         response: { 200: PromoRedeemResultSchema, 401: ApiErrorSchema, 409: ApiErrorSchema },
       },
     },
-    async (req, reply) => {
-      try {
+    (req, reply) =>
+      runDomain(reply, STATUS_BY_CODE, () =>
         // biome-ignore lint/style/noNonNullAssertion: requireAuth guarantees authUser.
-        return await redeemPoints(req.authUser!.id, req.body.code);
-      } catch (err) {
-        if (err instanceof PromoError) {
-          return reply.code(409).send({ error: { code: err.code, message: err.message } });
-        }
-        throw err;
-      }
-    },
+        redeemPoints(req.authUser!.id, req.body.code),
+      ),
   );
 
   // --- staff ---------------------------------------------------------------

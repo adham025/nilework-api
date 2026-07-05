@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { freelancerTier, tierCommissionBps } from "@/modules/levels/levels.service";
 import { notify } from "@/modules/notifications/notifications.service";
@@ -7,15 +8,7 @@ import type { Offer, OfferCreateInput, OrderDetail } from "@nilework/schemas";
 import type { TransactionSql } from "postgres";
 
 /** Typed error so routes can map offer failures to HTTP codes. */
-export class OfferError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "OfferError";
-  }
-}
+export class OfferError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
 
 const OFFER_COLUMNS = `
   id, conversation_id, freelancer_id, client_id, gig_id, title, description,

@@ -1,19 +1,12 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { grantPoints } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import type { CertifiedSkillSchema, SkillResult, SkillTestDetail } from "@nilework/schemas";
 import type { z } from "zod";
 
 /** Typed error so routes can map skill-test failures to HTTP codes. */
-export class SkillError extends Error {
-  constructor(
-    public code: "not_found" | "conflict" | "bad_request",
-    message: string,
-  ) {
-    super(message);
-    this.name = "SkillError";
-  }
-}
+export class SkillError extends DomainError<"not_found" | "conflict" | "bad_request"> {}
 
 interface Question {
   q: string;

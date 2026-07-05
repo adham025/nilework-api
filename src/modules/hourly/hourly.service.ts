@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { freelancerTier, tierCommissionBps } from "@/modules/levels/levels.service";
 import { notify } from "@/modules/notifications/notifications.service";
@@ -13,15 +14,7 @@ import type {
 } from "@nilework/schemas";
 
 /** Typed error so routes can map hourly-contract failures to HTTP codes. */
-export class HourlyError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "HourlyError";
-  }
-}
+export class HourlyError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
 
 const C_COLUMNS = `
   id, client_id, freelancer_id, title, hourly_rate_usd_minor, status, created_at, updated_at

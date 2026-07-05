@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { freelancerTier, tierCommissionBps, tierFor } from "@/modules/levels/levels.service";
 import { matchScore } from "@/modules/matching/match-score";
@@ -18,15 +19,7 @@ import type {
 } from "@nilework/schemas";
 
 /** Typed error so routes can map project/proposal failures to HTTP codes. */
-export class ProjectError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict" | "invalid",
-    message: string,
-  ) {
-    super(message);
-    this.name = "ProjectError";
-  }
-}
+export class ProjectError extends DomainError<"not_found" | "forbidden" | "conflict" | "invalid"> {}
 
 const PROJECT_COLUMNS = `
   id, client_id, category_id, title, description,

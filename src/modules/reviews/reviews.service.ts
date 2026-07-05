@@ -1,6 +1,8 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { awardAchievement } from "@/modules/gamification/gamification.service";
 import { notify } from "@/modules/notifications/notifications.service";
+import { assertOrderParty, getOrderParties } from "@/modules/orders/orders.service";
 import type {
   ProfileReviewsResponse,
   Review,
@@ -9,15 +11,7 @@ import type {
 } from "@nilework/schemas";
 
 /** Typed error so routes can map review failures to HTTP codes. */
-export class ReviewError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "ReviewError";
-  }
-}
+export class ReviewError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
 
 const REVIEW_COLUMNS = `
   id, order_id, reviewer_id, reviewee_id, reviewer_role, rating, comment, created_at
@@ -103,14 +97,8 @@ export async function listOrderReviews(
   viewerId: string,
 ): Promise<ReviewWithReviewer[]> {
   const sql = getDb();
-  const orders = await sql<{ client_id: string; freelancer_id: string }[]>`
-    select client_id, freelancer_id from public.orders where id = ${orderId} limit 1
-  `;
-  const order = orders[0];
-  if (!order) throw new ReviewError("not_found", "Order not found");
-  if (order.client_id !== viewerId && order.freelancer_id !== viewerId) {
-    throw new ReviewError("forbidden", "Not your order");
-  }
+  const order = await getOrderParties(orderId);
+  assertOrderParty(order, viewerId, ReviewError, "not_found", "forbidden");
 
   return sql<ReviewWithReviewer[]>`
     select ${sql.unsafe(prefixed(REVIEW_COLUMNS, "r"))}, ${sql.unsafe(REVIEWER_JSON)} as reviewer

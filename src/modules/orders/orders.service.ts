@@ -1,4 +1,5 @@
 import { getDb } from "@/core/db";
+import { DomainError } from "@/core/errors";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { getLatestRate } from "@/modules/fx/fx.service";
 import { awardAchievement, qualifyReferral } from "@/modules/gamification/gamification.service";
@@ -19,13 +20,40 @@ import type {
 import type { TransactionSql } from "postgres";
 
 /** Typed error so routes can map state-machine failures to HTTP codes. */
-export class OrderError extends Error {
-  constructor(
-    public code: "not_found" | "forbidden" | "conflict",
-    message: string,
-  ) {
-    super(message);
-    this.name = "OrderError";
+export class OrderError extends DomainError<"not_found" | "forbidden" | "conflict"> {}
+
+/** The two fields every "is this caller a party to this order" check needs. */
+export interface OrderParties {
+  client_id: string;
+  freelancer_id: string;
+}
+
+/** Fetch just the party ids for an order — the minimal read for an ownership check. */
+export async function getOrderParties(orderId: string): Promise<OrderParties | null> {
+  const sql = getDb();
+  const orders = await sql<OrderParties[]>`
+    select client_id, freelancer_id from public.orders where id = ${orderId} limit 1
+  `;
+  return orders[0] ?? null;
+}
+
+/**
+ * Throw `notFoundCode`/`forbiddenCode` (via the caller's own error class) unless
+ * `order` exists and `viewerId` is one of its two parties. Narrows `order` to
+ * non-null on return, so callers don't need their own null check afterward.
+ * Replaces the identical fetch-then-check block that used to be hand-copied
+ * into disputes/milestones/reviews (and any future order-scoped module).
+ */
+export function assertOrderParty<Code extends string>(
+  order: OrderParties | null,
+  viewerId: string,
+  ErrorCtor: new (code: Code, message: string) => Error,
+  notFoundCode: Code,
+  forbiddenCode: Code,
+): asserts order is OrderParties {
+  if (!order) throw new ErrorCtor(notFoundCode, "Order not found");
+  if (order.client_id !== viewerId && order.freelancer_id !== viewerId) {
+    throw new ErrorCtor(forbiddenCode, "Not your order");
   }
 }
 
