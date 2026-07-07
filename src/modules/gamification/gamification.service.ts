@@ -87,6 +87,23 @@ export async function qualifyReferral(referredId: string): Promise<void> {
   }
 }
 
+/**
+ * BYOC ("bring your own client"): true when `clientId` joined through
+ * `freelancerId`'s referral link. Orders between an invited client and the
+ * freelancer who brought them run at 0% commission — the platform never
+ * taxes demand a freelancer generated themselves, which makes inviting
+ * existing off-platform clients a pure win for the freelancer.
+ */
+export async function isReferredClientOf(clientId: string, freelancerId: string): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    select id from public.referrals
+    where referred_id = ${clientId} and referrer_id = ${freelancerId}
+    limit 1
+  `;
+  return Boolean(rows[0]);
+}
+
 /** Generate (once) and return the caller's referral code. */
 export async function ensureReferralCode(profileId: string): Promise<string> {
   const sql = getDb();

@@ -2,7 +2,11 @@ import { getDb } from "@/core/db";
 import { DomainError } from "@/core/errors";
 import { getPublicConfig } from "@/modules/config/config.service";
 import { getLatestRate } from "@/modules/fx/fx.service";
-import { awardAchievement, qualifyReferral } from "@/modules/gamification/gamification.service";
+import {
+  awardAchievement,
+  isReferredClientOf,
+  qualifyReferral,
+} from "@/modules/gamification/gamification.service";
 import { freelancerTier, tierCommissionBps, tierHoldDays } from "@/modules/levels/levels.service";
 import { notify } from "@/modules/notifications/notifications.service";
 import { ensureProfile } from "@/modules/profiles/profiles.service";
@@ -149,14 +153,20 @@ export async function createOrder(
   }
 
   // Commission starts from the freelancer's Pro Path tier (§5.3 perk); a fee-waiver
-  // promo (§4.4) then reduces it further. Both resolved before the tx.
+  // promo (§4.4) then reduces it further. BYOC beats both: a client the freelancer
+  // brought to the platform themselves always trades with them at 0% commission.
+  // All resolved before the tx.
   const baseBps = (await getPublicConfig()).commission_bps;
   const tierBps = tierCommissionBps(await freelancerTier(gig.freelancer_id), baseBps);
+  const byoc = await isReferredClientOf(clientId, gig.freelancer_id);
 
   const order = await sql.begin(async (tx) => {
     let commissionBpsOverride: number | undefined = tierBps !== baseBps ? tierBps : undefined;
     let promoId: string | undefined;
-    if (promoCode) {
+    if (byoc) {
+      // Fee already 0 — don't validate/consume a promo code for nothing.
+      commissionBpsOverride = 0;
+    } else if (promoCode) {
       const res = await checkPromo(tx, promoCode, clientId);
       if (!res.ok) throw new OrderError("conflict", `Promo code not valid: ${res.reason}`);
       if (res.promo.type !== "fee_waiver") {
