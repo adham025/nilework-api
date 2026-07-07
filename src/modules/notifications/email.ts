@@ -61,7 +61,7 @@ const EMAIL_COPY: Record<string, Record<Locale, Copy>> = {
 
 function renderHtml(line: string, locale: Locale): string {
   const dir = locale === "ar" ? "rtl" : "ltr";
-  const cta = locale === "ar" ? "افتح نايلورك" : "Open Nilework";
+  const cta = locale === "ar" ? "افتح نايل ورك" : "Open Nilework";
   return `<!doctype html><html dir="${dir}"><body style="font-family:system-ui,sans-serif;background:#fafafa;padding:24px">
   <div style="max-width:480px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:12px;padding:24px">
     <p style="font-size:15px;color:#171717;line-height:1.6">${line}</p>
