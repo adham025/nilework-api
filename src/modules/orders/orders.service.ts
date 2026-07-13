@@ -382,6 +382,48 @@ export async function settleHolds(): Promise<number> {
   return released;
 }
 
+/**
+ * Expire-pending sweep (worker): cancel orders that were created but never
+ * funded. Until escrow is funded the deal doesn't really exist — the
+ * freelancer isn't even notified — so a stale pending_payment row is just an
+ * abandoned checkout. 72 hours keeps the client's intent alive across a
+ * weekend without leaving zombie orders around. Returns the number cancelled.
+ */
+export async function expirePendingOrders(maxAgeHours = 72): Promise<number> {
+  const sql = getDb();
+  const stale = await sql<{ id: string; client_id: string }[]>`
+    select id, client_id from public.orders
+    where status = 'pending_payment'
+      and created_at <= now() - (${maxAgeHours} || ' hours')::interval
+    order by created_at
+    limit 200
+  `;
+  let cancelled = 0;
+  for (const { id, client_id } of stale) {
+    try {
+      await sql.begin(async (tx) => {
+        const order = await lockOrder(tx, id);
+        if (order.status !== "pending_payment") return; // funded meanwhile — leave it
+        await tx`update public.orders set status = 'cancelled' where id = ${id}`;
+        await recordEvent(
+          tx,
+          id,
+          "pending_payment",
+          "cancelled",
+          null,
+          "system",
+          "Payment not completed in time",
+        );
+      });
+      await notify(client_id, "order_cancelled", { order_id: id });
+      cancelled++;
+    } catch {
+      // Skip and let the next sweep retry; never let one bad row stall the batch.
+    }
+  }
+  return cancelled;
+}
+
 export async function listMyOrders(
   viewerId: string,
   query: OrderListQuery,

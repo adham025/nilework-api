@@ -3,7 +3,7 @@ import { env } from "@/core/env";
 import { initSentry } from "@/core/sentry";
 import { refreshFxRate } from "@/modules/fx/fx.service";
 import { expireOffers } from "@/modules/offers/offers.service";
-import { settleHolds } from "@/modules/orders/orders.service";
+import { expirePendingOrders, settleHolds } from "@/modules/orders/orders.service";
 import { PgBoss } from "pg-boss";
 
 /**
@@ -15,6 +15,7 @@ import { PgBoss } from "pg-boss";
 const SETTLE_HOLDS = "settle-holds";
 const FX_REFRESH = "fx-refresh";
 const EXPIRE_OFFERS = "expire-offers";
+const EXPIRE_PENDING_ORDERS = "expire-pending-orders";
 
 async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
   try {
@@ -40,6 +41,7 @@ async function main() {
   await ensureQueue(boss, SETTLE_HOLDS);
   await ensureQueue(boss, FX_REFRESH);
   await ensureQueue(boss, EXPIRE_OFFERS);
+  await ensureQueue(boss, EXPIRE_PENDING_ORDERS);
 
   await boss.work(SETTLE_HOLDS, async () => {
     const released = await settleHolds();
@@ -52,14 +54,21 @@ async function main() {
     const expired = await expireOffers();
     if (expired > 0) console.log(`expire-offers: expired ${expired} offer(s)`);
   });
+  await boss.work(EXPIRE_PENDING_ORDERS, async () => {
+    const cancelled = await expirePendingOrders();
+    if (cancelled > 0) {
+      console.log(`expire-pending-orders: cancelled ${cancelled} unfunded order(s)`);
+    }
+  });
 
   // Durable cron schedules (idempotent upserts).
   await boss.schedule(SETTLE_HOLDS, "*/5 * * * *"); // every 5 minutes
   await boss.schedule(FX_REFRESH, "0 * * * *"); // hourly
   await boss.schedule(EXPIRE_OFFERS, "*/10 * * * *"); // every 10 minutes
+  await boss.schedule(EXPIRE_PENDING_ORDERS, "30 * * * *"); // hourly
 
   console.log(
-    "nilework worker started (pg-boss: settle-holds */5m, fx-refresh hourly, expire-offers */10m)",
+    "nilework worker started (pg-boss: settle-holds */5m, fx-refresh hourly, expire-offers */10m, expire-pending-orders hourly)",
   );
 
   const shutdown = async () => {
